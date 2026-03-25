@@ -3,6 +3,13 @@ import express from "express";
 import { z } from "zod";
 import { prisma } from "./db.js";
 
+// Helper function for consistent error responses
+function sendError(res: express.Response, status: number, message: string, code?: string) {
+  const body: { error: string; code?: string } = { error: message };
+  if (code) body.code = code;
+  res.status(status).json(body);
+}
+
 export function createApp() {
   const app = express();
 
@@ -15,6 +22,51 @@ export function createApp() {
       service: "NovaSupport backend",
       network: "Stellar Testnet"
     });
+  });
+
+  // Zod schema for creating a profile
+  const CreateProfileSchema = z.object({
+    username: z.string().min(3).max(32).regex(/^[a-z0-9-]+$/, "Username must be lowercase alphanumeric with hyphens only"),
+    displayName: z.string().min(1).max(64),
+    bio: z.string().max(280).optional(),
+    walletAddress: z.string().startsWith("G").length(56, "Stellar address must be 56 characters starting with G"),
+    acceptedAssets: z.array(z.object({
+      code: z.string().min(1).max(12),
+      issuer: z.string().optional(),
+    })).min(1, "At least one accepted asset is required"),
+    ownerId: z.string().min(1),
+  });
+
+  // POST /profiles - Create a new creator profile
+  app.post("/profiles", async (req, res) => {
+    const result = CreateProfileSchema.safeParse(req.body);
+    if (!result.success) {
+      return sendError(res, 400, "Invalid request body");
+    }
+
+    const { username, displayName, bio, walletAddress, acceptedAssets, ownerId } = result.data;
+
+    try {
+      const profile = await prisma.$transaction(async (tx) => {
+        return tx.profile.create({
+          data: { 
+            username, 
+            displayName, 
+            bio: bio ?? "", 
+            walletAddress,
+            ownerId,
+            acceptedAssets: { create: acceptedAssets },
+          },
+          include: { acceptedAssets: true },
+        });
+      });
+      return res.status(201).json(profile);
+    } catch (e: any) {
+      if (e.code === "P2002") {
+        return sendError(res, 409, "Username already taken", "USERNAME_TAKEN");
+      }
+      return sendError(res, 500, "Internal server error");
+    }
   });
 
   app.get("/profiles/:username", async (req, res) => {
