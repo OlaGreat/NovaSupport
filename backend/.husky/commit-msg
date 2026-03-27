@@ -1,0 +1,24 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Validate commit message format
+# Format: type(scope): description or type: description
+# Types: feat, fix, docs, style, refactor, test, chore
+
+commit_msg=$(cat "$1")
+pattern="^(feat|fix|docs|style|refactor|test|chore)(\(.+\))?:\s.+"
+
+if ! echo "$commit_msg" | grep -qE "$pattern"; then
+  echo "Invalid commit message format!"
+  echo ""
+  echo "Format: type(scope): description"
+  echo "   or: type: description"
+  echo ""
+  echo "Types: feat, fix, docs, style, refactor, test, chore"
+  echo ""
+  echo "Examples:"
+  echo "  feat(auth): add login endpoint"
+  echo "  fix: correct user validation"
+  echo "  docs: update API documentation"
+  exit 1
+fi
