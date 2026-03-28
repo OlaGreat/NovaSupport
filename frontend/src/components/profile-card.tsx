@@ -1,4 +1,6 @@
+"use client";
 import { isValidStellarAddress } from "@/lib/stellar";
+import { useState } from 'react';
 
 type Asset = {
   code: string;
@@ -21,6 +23,16 @@ export function ProfileCard({
   acceptedAssets
 }: ProfileCardProps) {
   const isValid = isValidStellarAddress(walletAddress);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(
+      `${window.location.origin}/profile/${username}`
+    );
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
 
   return (
     <article className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-7 shadow-xl shadow-black/15">
@@ -35,7 +47,7 @@ export function ProfileCard({
           <p className="mt-2 break-all">{walletAddress}</p>
           <p className={`mt-3 ${isValid ? "text-mint" : "text-gold"}`}>
             {isValid ? "Valid Stellar address" : "Replace with a valid Stellar address"}
-          </p>
+          </p>          
         </div>
       </div>
 
@@ -51,9 +63,15 @@ export function ProfileCard({
               {asset.issuer ? <span className="ml-2 text-xs">{asset.issuer}</span> : <span className="ml-2 text-xs">native</span>}
             </div>
           ))}
+          <button onClick={handleCopy}>
+            {copied ? 'Copied!' : 'Copy profile link'}
+          </button>
         </div>
       </div>
     </article>
+    
+    
   );
+  
 }
 
