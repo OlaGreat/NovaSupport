@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
-import { API_BASE_URL } from "@/lib/config";
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend
@@ -14,6 +13,8 @@ import {
   ArrowUpRight, ArrowDownRight, Info
 } from "lucide-react";
 import { motion } from "framer-motion";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 
 interface AnalyticsData {
   summary: {
@@ -50,19 +51,7 @@ type TransactionCsvRow = {
   txHash: string;
 };
 
-type ChartPoint = {
-  date: string;
-  amount: number;
-};
-
-type ChartRange = "7D" | "30D" | "90D";
-
 const COLORS = ["#00FFC2", "#00E0FF", "#FFB800", "#FF4D4D", "#9D4EDD"];
-const PERIOD_DAYS: Record<ChartRange, number> = {
-  "7D": 7,
-  "30D": 30,
-  "90D": 90,
-};
 
 function toNumber(value: unknown): number {
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -95,23 +84,6 @@ function timeAgo(value: string): string {
 
   const diffDays = Math.floor(diffHours / 24);
   return `${diffDays}d ago`;
-}
-
-function formatChartDate(value: string): string {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-
-  return parsed.toLocaleDateString("en-GB", {
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function getFromDate(period: ChartRange): string {
-  const days = PERIOD_DAYS[period];
-  const from = new Date();
-  from.setDate(from.getDate() - days);
-  return from.toISOString();
 }
 
 function normalizeAnalyticsResponse(json: unknown): AnalyticsData {
@@ -168,35 +140,6 @@ function normalizeAnalyticsResponse(json: unknown): AnalyticsData {
   };
 }
 
-function normalizeTimeseriesResponse(json: unknown): ChartPoint[] {
-  const payload = (json ?? {}) as Record<string, unknown>;
-  const source = (
-    payload.points ??
-    payload.data ??
-    payload.series ??
-    payload.dailyContributions ??
-    payload.daily_contributions ??
-    []
-  ) as unknown[];
-
-  return source.map((entry, index) => {
-    const item = entry as Record<string, unknown>;
-    const rawDate = toString(
-      item.date ??
-      item.label ??
-      item.periodStart ??
-      item.period_start ??
-      item.timestamp,
-      `Point ${index + 1}`
-    );
-
-    return {
-      date: formatChartDate(rawDate),
-      amount: toNumber(item.amount ?? item.totalAmount ?? item.total_amount ?? item.value ?? item.total),
-    };
-  });
-}
-
 function csvEscape(value: string): string {
   const escaped = value.replace(/"/g, "\"\"");
   return `"${escaped}"`;
@@ -240,12 +183,9 @@ function downloadCsv(rows: TransactionCsvRow[]): void {
 }
 
 export default function DashboardPage() {
-  const { campaignId } = useParams<{ campaignId: string }>();
+  const { campaignId } = useParams();
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [settings, setSettings] = useState<ProfileSettings | null>(null);
-  const [chartData, setChartData] = useState<ChartPoint[]>([]);
-  const [selectedPeriod, setSelectedPeriod] = useState<ChartRange>("30D");
-  const [chartLoading, setChartLoading] = useState(true);
   const [connectedWallet, setConnectedWallet] = useState("");
   const [csvLoading, setCsvLoading] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
@@ -280,44 +220,6 @@ export default function DashboardPage() {
   }, [campaignId]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function fetchChartData() {
-      setChartLoading(true);
-
-      try {
-        const from = getFromDate(selectedPeriod);
-        const response = await fetch(
-          `${API_BASE_URL}/profiles/${campaignId}/analytics/timeseries?period=daily&from=${encodeURIComponent(from)}`
-        );
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch chart data");
-        }
-
-        const json = await response.json();
-        if (!cancelled) {
-          setChartData(normalizeTimeseriesResponse(json));
-        }
-      } catch {
-        if (!cancelled) {
-          setChartData([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setChartLoading(false);
-        }
-      }
-    }
-
-    fetchChartData();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [campaignId, selectedPeriod]);
-
-  useEffect(() => {
     const wallet = window.localStorage.getItem("walletAddress");
     if (wallet) setConnectedWallet(wallet);
   }, []);
@@ -327,7 +229,6 @@ export default function DashboardPage() {
     connectedWallet &&
     settings.walletAddress === connectedWallet
   );
-  const isChartEmpty = chartData.length === 0 || chartData.every((point) => point.amount === 0);
 
   async function handleDownloadCsv() {
     if (!isOwner) return;
@@ -450,89 +351,52 @@ export default function DashboardPage() {
             animate={{ opacity: 1, y: 0 }}
             className="col-span-1 rounded-3xl border border-white/10 bg-white/5 p-6 lg:col-span-2 shadow-sm shadow-black/40"
           >
-            <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <h3 className="text-sm font-semibold uppercase tracking-widest text-steel">
-                Earnings Trend
-              </h3>
-              <div className="inline-flex rounded-full border border-white/10 bg-white/5 p-1">
-                {(["7D", "30D", "90D"] as const).map((period) => (
-                  <button
-                    key={period}
-                    type="button"
-                    onClick={() => setSelectedPeriod(period)}
-                    className={`rounded-full px-4 py-2 text-xs font-semibold transition ${
-                      selectedPeriod === period
-                        ? "bg-mint text-ink"
-                        : "text-sky/70 hover:text-white"
-                    }`}
-                  >
-                    {period}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <h3 className="mb-6 text-sm font-semibold uppercase tracking-widest text-steel">
+              Contribution Trend (7 Days)
+            </h3>
             <div className="h-[350px] w-full">
-              {chartLoading ? (
-                <div className="grid h-full gap-4">
-                  <div className="h-8 w-32 animate-pulse rounded-full bg-white/10" />
-                  <div className="flex-1 animate-pulse rounded-3xl bg-white/[0.04]" />
-                  <div className="grid grid-cols-4 gap-3">
-                    {Array.from({ length: 4 }, (_, index) => (
-                      <div key={index} className="h-4 animate-pulse rounded-full bg-white/10" />
-                    ))}
-                  </div>
-                </div>
-              ) : isChartEmpty ? (
-                <div className="flex h-full flex-col items-center justify-center rounded-3xl border border-dashed border-white/10 bg-white/[0.02] text-center">
-                  <p className="text-lg font-semibold text-white">No earnings data yet</p>
-                  <p className="mt-2 max-w-sm text-sm text-steel">
-                    Earnings will appear here once successful support transactions are recorded for this period.
-                  </p>
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData}>
-                    <defs>
-                      <linearGradient id="colorAmt" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#00FFC2" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="#00FFC2" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" />
-                    <XAxis 
-                      dataKey="date" 
-                      stroke="#ffffff40" 
-                      fontSize={12}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <YAxis 
-                      stroke="#ffffff40" 
-                      fontSize={12}
-                      tickLine={false}
-                      axisLine={false}
-                      tickFormatter={(v) => `${v}`}
-                    />
-                    <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: "#0A0A0B", 
-                        border: "1px solid rgba(255,255,255,0.1)",
-                        borderRadius: "12px",
-                        fontSize: "12px"
-                      }}
-                      itemStyle={{ color: "#00FFC2" }}
-                    />
-                    <Area 
-                      type="monotone" 
-                      dataKey="amount" 
-                      stroke="#00FFC2" 
-                      fillOpacity={1} 
-                      fill="url(#colorAmt)" 
-                      strokeWidth={3}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              )}
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={data.dailyContributions}>
+                  <defs>
+                    <linearGradient id="colorAmt" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#00FFC2" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#00FFC2" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" />
+                  <XAxis 
+                    dataKey="date" 
+                    stroke="#ffffff40" 
+                    fontSize={12}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis 
+                    stroke="#ffffff40" 
+                    fontSize={12}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(v) => `${v}`}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: "#0A0A0B", 
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      borderRadius: "12px",
+                      fontSize: "12px"
+                    }}
+                    itemStyle={{ color: "#00FFC2" }}
+                  />
+                  <Area 
+                    type="monotone" 
+                    dataKey="amount" 
+                    stroke="#00FFC2" 
+                    fillOpacity={1} 
+                    fill="url(#colorAmt)" 
+                    strokeWidth={3}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
             </div>
           </motion.div>
 
