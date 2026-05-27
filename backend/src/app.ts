@@ -162,8 +162,39 @@ export function createApp(customLogger?: Logger) {
       info: {
         title: "NovaSupport API",
         version: "1.0.0",
-        description:
-          "Backend API for NovaSupport — Stellar-native creator support platform",
+        description: `Backend API for NovaSupport — Stellar-native creator support platform.
+
+## Authentication
+Most write endpoints require a JWT Bearer token. Obtain one via the \`/auth/challenge\` + \`/auth/verify\` flow:
+1. POST \`/auth/challenge\` with your Stellar wallet address to get a challenge nonce.
+2. Sign the challenge with your wallet.
+3. POST \`/auth/verify\` with the wallet address and signature to receive a JWT.
+4. Include the JWT in subsequent requests as \`Authorization: Bearer <token>\`.
+
+## Rate Limiting
+All endpoints are subject to rate limiting. Response headers include:
+- \`RateLimit-Limit\`: Max requests per window
+- \`RateLimit-Remaining\`: Requests left in current window
+- \`RateLimit-Reset\`: Unix timestamp when the window resets
+
+| Limiter | Window | Limit | Applies to |
+|---------|--------|-------|------------|
+| Global | 15 min | 200 | All requests |
+| Write | 15 min | 20 | POST/PATCH/DELETE endpoints |
+| Profile creation | 1 hour | 3 | POST /profiles |
+| Email resend | 5 min | 1 | Resend verification emails |
+
+Exceeding the limit returns \`429 Too Many Requests\` with code \`RATE_LIMIT_EXCEEDED\`.
+
+## Pagination
+List endpoints accept \`limit\` (1–100, default 20) and \`offset\` (≥0, default 0) query parameters.
+Responses include \`total\`, \`limit\`, and \`offset\` fields.
+
+## Error Responses
+All errors return JSON with an \`error\` field and optional \`code\`:
+\`\`\`json
+{ "error": "Human-readable message", "code": "MACHINE_READABLE_CODE", "requestId": "abc123" }
+\`\`\``,
       },
       servers: [{ url: "http://localhost:4000" }],
       components: {
@@ -187,6 +218,29 @@ export function createApp(customLogger?: Logger) {
             description:
               "Unix timestamp (seconds) when the current rate limit window resets.",
             schema: { type: "integer" },
+          },
+          "X-Request-ID": {
+            description: "Unique request identifier for tracing.",
+            schema: { type: "string" },
+          },
+        },
+        schemas: {
+          Error: {
+            type: "object",
+            properties: {
+              error: { type: "string", description: "Human-readable error message" },
+              code: { type: "string", description: "Machine-readable error code" },
+              requestId: { type: "string", description: "Request tracing ID" },
+            },
+            required: ["error"],
+          },
+          PaginationMeta: {
+            type: "object",
+            properties: {
+              total: { type: "integer", description: "Total number of items" },
+              limit: { type: "integer", description: "Items per page" },
+              offset: { type: "integer", description: "Items skipped" },
+            },
           },
         },
       },
@@ -278,8 +332,21 @@ export function createApp(customLogger?: Logger) {
    *     responses:
    *       200:
    *         description: Service is healthy
+   *         content:
+   *           application/json:
+   *             example:
+   *               ok: true
+   *               service: "NovaSupport backend"
+   *               network: "Stellar Testnet"
+   *               database: "connected"
    *       503:
    *         description: Service is unhealthy or database is unreachable
+   *         content:
+   *           application/json:
+   *             example:
+   *               ok: false
+   *               service: "NovaSupport backend"
+   *               database: "unreachable"
    */
   // ── Health check with database connectivity ────────────────────────────
 
@@ -309,6 +376,10 @@ export function createApp(customLogger?: Logger) {
    * /auth/challenge:
    *   post:
    *     summary: Request a challenge nonce for wallet signature
+   *     description: |
+   *       Step 1 of authentication. Send your Stellar wallet address to receive a challenge nonce.
+   *       Sign the challenge with your wallet, then call POST /auth/verify to get a JWT.
+   *       Rate limited to 200 requests per 15 minutes (global) and 20 per 15 minutes (write).
    *     requestBody:
    *       required: true
    *       content:
@@ -660,21 +731,94 @@ export function createApp(customLogger?: Logger) {
    * @openapi
    * /profiles/search:
    *   get:
-   *     summary: Search profiles by username or display name
+   *     summary: Search profiles with fuzzy matching
+   *     description: |
+   *       Searches profiles by username or display name using PostgreSQL pg_trgm fuzzy matching.
+   *       Tolerates typos and returns results sorted by relevance score.
+   *       Returns suggestions when no matches are found.
    *     parameters:
    *       - in: query
    *         name: q
    *         required: true
    *         schema:
    *           type: string
-   *         description: Search query (case-insensitive)
+   *           minLength: 1
+   *           maxLength: 100
+   *           example: jhonn
+   *         description: Search query (fuzzy, typo-tolerant)
+   *       - in: query
+   *         name: limit
+   *         schema:
+   *           type: integer
+   *           minimum: 1
+   *           maximum: 50
+   *           default: 10
+   *         description: Max results to return
    *     responses:
    *       200:
-   *         description: Search results (up to 10 profiles)
+   *         description: Search results sorted by relevance
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 profiles:
+   *                   type: array
+   *                   items:
+   *                     type: object
+   *                     properties:
+   *                       username:
+   *                         type: string
+   *                         example: john_doe
+   *                       displayName:
+   *                         type: string
+   *                         example: John Doe
+   *                       avatarUrl:
+   *                         type: string
+   *                         nullable: true
+   *                       bio:
+   *                         type: string
+   *                       relevance:
+   *                         type: number
+   *                         format: float
+   *                         description: Similarity score (0–1)
+   *                         example: 0.65
+   *                 suggestions:
+   *                   type: array
+   *                   items:
+   *                     type: string
+   *                   description: Suggested usernames when no profiles match
+   *             examples:
+   *               matchFound:
+   *                 summary: Profiles found
+   *                 value:
+   *                   profiles:
+   *                     - username: john_doe
+   *                       displayName: John Doe
+   *                       avatarUrl: "https://example.com/avatar.jpg"
+   *                       bio: "Creator on Stellar"
+   *                       relevance: 0.65
+   *                   suggestions: []
+   *               noMatch:
+   *                 summary: No matches — suggestions returned
+   *                 value:
+   *                   profiles: []
+   *                   suggestions: ["john_doe", "jane_doe"]
+   *                   message: "No profiles found. Did you mean one of these?"
    *       400:
    *         description: Missing or empty query parameter
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   *             example:
+   *               error: "Query parameter 'q' is required and cannot be empty"
    *       500:
    *         description: Internal server error
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
    */
   v1Router.get("/profiles/search", async (req, res) => {
     const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
@@ -763,13 +907,83 @@ export function createApp(customLogger?: Logger) {
    *         required: true
    *         schema:
    *           type: string
+   *           example: john_doe
    *     responses:
    *       200:
    *         description: Profile found
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 id:
+   *                   type: string
+   *                 username:
+   *                   type: string
+   *                 displayName:
+   *                   type: string
+   *                 bio:
+   *                   type: string
+   *                 avatarUrl:
+   *                   type: string
+   *                   nullable: true
+   *                 walletAddress:
+   *                   type: string
+   *                 email:
+   *                   type: string
+   *                   nullable: true
+   *                 websiteUrl:
+   *                   type: string
+   *                   nullable: true
+   *                 twitterHandle:
+   *                   type: string
+   *                   nullable: true
+   *                 githubHandle:
+   *                   type: string
+   *                   nullable: true
+   *                 acceptedAssets:
+   *                   type: array
+   *                   items:
+   *                     type: object
+   *                     properties:
+   *                       code:
+   *                         type: string
+   *                       issuer:
+   *                         type: string
+   *                         nullable: true
+   *                 createdAt:
+   *                   type: string
+   *                   format: date-time
+   *             example:
+   *               id: "clx1abc123"
+   *               username: "john_doe"
+   *               displayName: "John Doe"
+   *               bio: "Stellar ecosystem builder"
+   *               avatarUrl: "https://example.com/avatar.jpg"
+   *               walletAddress: "GBZXN7PIRZGNMHGA7MUUUF4GWPY5AYPV6LY4UV2GL6VJGIQRXFDNMADI"
+   *               email: "john@example.com"
+   *               websiteUrl: "https://johndoe.com"
+   *               twitterHandle: "johndoe"
+   *               githubHandle: "johndoe"
+   *               acceptedAssets:
+   *                 - code: "XLM"
+   *                 - code: "USDC"
+   *                   issuer: "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3THOJ2E37CEGOEZWDSP"
+   *               createdAt: "2025-01-15T10:30:00.000Z"
    *       404:
    *         description: Profile not found
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   *             example:
+   *               error: "Profile not found"
    *       500:
    *         description: Internal server error
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
    */
   v1Router.get("/profiles/:username", async (req, res) => {
     try {
@@ -890,6 +1104,10 @@ export function createApp(customLogger?: Logger) {
    * /profiles:
    *   post:
    *     summary: Create a new profile
+   *     description: |
+   *       Create a new creator profile. Requires JWT authentication — the wallet address in the request must match the authenticated user.
+   *       **Rate limits:** 3 profiles per hour per IP (profile creation limiter) + 20 requests per 15 min (write limiter).
+   *       Usernames must be 3–32 characters, lowercase alphanumeric with hyphens only.
    *     security:
    *       - bearerAuth: []
    *     requestBody:
@@ -901,31 +1119,47 @@ export function createApp(customLogger?: Logger) {
    *             properties:
    *               username:
    *                 type: string
+   *                 minLength: 3
+   *                 maxLength: 32
+   *                 pattern: '^[a-z0-9-]+$'
+   *                 example: john_doe
    *               displayName:
    *                 type: string
+   *                 maxLength: 64
+   *                 example: John Doe
    *               bio:
    *                 type: string
+   *                 maxLength: 280
+   *                 example: "Stellar ecosystem builder and content creator"
    *               walletAddress:
    *                 type: string
+   *                 example: GBZXN7PIRZGNMHGA7MUUUF4GWPY5AYPV6LY4UV2GL6VJGIQRXFDNMADI
    *               email:
    *                 type: string
    *                 format: email
+   *                 example: john@example.com
    *               websiteUrl:
    *                 type: string
    *                 format: uri
+   *                 example: "https://johndoe.com"
    *               twitterHandle:
    *                 type: string
+   *                 example: johndoe
    *               githubHandle:
    *                 type: string
+   *                 example: johndoe
    *               acceptedAssets:
    *                 type: array
+   *                 minItems: 1
    *                 items:
    *                   type: object
    *                   properties:
    *                     code:
    *                       type: string
+   *                       example: XLM
    *                     issuer:
    *                       type: string
+   *                       example: GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3THOJ2E37CEGOEZWDSP
    *                   required:
    *                     - code
    *             required:
@@ -936,14 +1170,63 @@ export function createApp(customLogger?: Logger) {
    *     responses:
    *       201:
    *         description: Profile created
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               description: Created profile with acceptedAssets
    *       400:
    *         description: Invalid request body or validation failed
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   *             example:
+   *               error: "Invalid request body"
+   *       401:
+   *         description: Missing or invalid JWT
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
    *       403:
    *         description: Wallet address does not match authenticated user
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   *             example:
+   *               error: "Forbidden: Wallet address does not match authenticated user"
    *       409:
    *         description: Email or username already taken
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   *             examples:
+   *               usernameTaken:
+   *                 value:
+   *                   error: "Username already taken"
+   *                   code: "USERNAME_TAKEN"
+   *               emailTaken:
+   *                 value:
+   *                   error: "Email already taken"
+   *                   code: "EMAIL_TAKEN"
+   *       429:
+   *         description: Rate limit exceeded
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   *             example:
+   *               error: "Too many profiles created from this IP address. Please try again in an hour."
+   *               code: "RATE_LIMIT_EXCEEDED"
    *       500:
    *         description: Internal server error
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
    */
   v1Router.post("/profiles", requireAuth, profileCreationLimiter, writeLimiter, async (req, res) => {
     const parsed = createProfileSchema.safeParse(req.body);
@@ -1064,6 +1347,9 @@ export function createApp(customLogger?: Logger) {
    * /profiles/{username}:
    *   patch:
    *     summary: Update profile
+   *     description: |
+   *       Update profile fields. Requires authentication — the JWT wallet address must match the profile owner.
+   *       Changing email triggers a new verification email.
    *     security:
    *       - bearerAuth: []
    *     parameters:
@@ -1072,6 +1358,7 @@ export function createApp(customLogger?: Logger) {
    *         required: true
    *         schema:
    *           type: string
+   *           example: john_doe
    *     requestBody:
    *       content:
    *         application/json:
@@ -1080,34 +1367,84 @@ export function createApp(customLogger?: Logger) {
    *             properties:
    *               displayName:
    *                 type: string
+   *                 maxLength: 64
+   *                 example: "John D."
    *               bio:
    *                 type: string
+   *                 maxLength: 280
+   *                 example: "Updated bio — Stellar builder"
    *               avatarUrl:
    *                 type: string
    *                 format: uri
    *               email:
    *                 type: string
    *                 format: email
+   *                 example: "newemail@example.com"
    *               websiteUrl:
    *                 type: string
    *                 format: uri
+   *                 example: "https://johndoe.com"
    *               twitterHandle:
    *                 type: string
+   *                 example: "johndoe"
    *               githubHandle:
    *                 type: string
+   *                 example: "johndoe"
    *     responses:
    *       200:
    *         description: Profile updated
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               description: Updated profile object with acceptedAssets
    *       400:
    *         description: Invalid request body
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   *             example:
+   *               error: "Invalid request body"
+   *       401:
+   *         description: Missing or invalid authentication token
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   *             example:
+   *               error: "Unauthorized"
    *       403:
    *         description: Authenticated user does not own this profile
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   *             example:
+   *               error: "Forbidden: You do not own this profile"
    *       404:
    *         description: Profile not found
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   *             example:
+   *               error: "Profile not found"
    *       409:
    *         description: Email already in use
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   *             example:
+   *               error: "Email already in use"
+   *               code: "EMAIL_TAKEN"
    *       500:
    *         description: Internal server error
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
    */
   v1Router.patch(
     "/profiles/:username",
@@ -1522,12 +1859,14 @@ export function createApp(customLogger?: Logger) {
    * /profiles/{username}/transactions:
    *   get:
    *     summary: Get profile support transactions
+   *     description: Returns paginated support transactions for a profile, with optional filtering by network, status, and asset code.
    *     parameters:
    *       - in: path
    *         name: username
    *         required: true
    *         schema:
    *           type: string
+   *           example: john_doe
    *       - in: query
    *         name: limit
    *         schema:
@@ -1547,13 +1886,84 @@ export function createApp(customLogger?: Logger) {
    *         name: network
    *         schema:
    *           type: string
+   *           enum: [TESTNET, MAINNET]
+   *         description: Filter by Stellar network
+   *       - in: query
+   *         name: status
+   *         schema:
+   *           type: string
+   *           enum: [pending, SUCCESS, failed]
+   *         description: Filter by transaction status
+   *       - in: query
+   *         name: assetCode
+   *         schema:
+   *           type: string
+   *           example: XLM
+   *         description: Filter by asset code
    *     responses:
    *       200:
-   *         description: List of transactions
+   *         description: Paginated list of transactions
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 transactions:
+   *                   type: array
+   *                   items:
+   *                     type: object
+   *                     properties:
+   *                       txHash:
+   *                         type: string
+   *                       amount:
+   *                         type: string
+   *                       assetCode:
+   *                         type: string
+   *                       assetIssuer:
+   *                         type: string
+   *                         nullable: true
+   *                       status:
+   *                         type: string
+   *                       message:
+   *                         type: string
+   *                         nullable: true
+   *                       supporterAddress:
+   *                         type: string
+   *                         nullable: true
+   *                       createdAt:
+   *                         type: string
+   *                         format: date-time
+   *                 total:
+   *                   type: integer
+   *                 limit:
+   *                   type: integer
+   *                 offset:
+   *                   type: integer
+   *             example:
+   *               transactions:
+   *                 - txHash: "abc123def456..."
+   *                   amount: "10.0000000"
+   *                   assetCode: "XLM"
+   *                   assetIssuer: null
+   *                   status: "SUCCESS"
+   *                   message: "Keep up the great work!"
+   *                   supporterAddress: "GBZXN7..."
+   *                   createdAt: "2025-03-15T14:30:00.000Z"
+   *               total: 42
+   *               limit: 20
+   *               offset: 0
    *       404:
    *         description: Profile not found
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
    *       500:
    *         description: Internal server error
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
    */
   v1Router.get("/profiles/:username/transactions", async (req, res) => {
     const pagination = paginationSchema.safeParse(req.query);
@@ -1956,6 +2366,11 @@ export function createApp(customLogger?: Logger) {
    * /support-transactions:
    *   post:
    *     summary: Record a support transaction
+   *     description: |
+   *       Record a Stellar support transaction after it has been submitted to the network.
+   *       The API verifies the transaction hash against Horizon before recording.
+   *       Triggers milestone checks, email notifications, and webhook deliveries.
+   *       **Rate limits:** 20 requests per 15 minutes (write limiter).
    *     security:
    *       - bearerAuth: []
    *     requestBody:
@@ -1967,30 +2382,42 @@ export function createApp(customLogger?: Logger) {
    *             properties:
    *               txHash:
    *                 type: string
+   *                 example: "abc123def456789..."
    *               amount:
    *                 type: string
+   *                 example: "10.0000000"
    *               assetCode:
    *                 type: string
+   *                 example: XLM
    *               assetIssuer:
    *                 type: string
+   *                 nullable: true
+   *                 example: GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3THOJ2E37CEGOEZWDSP
    *               status:
    *                 type: string
    *                 default: pending
+   *                 example: SUCCESS
    *               message:
    *                 type: string
    *                 maxLength: 280
    *                 description: Sanitized support message
+   *                 example: "Keep up the great work!"
    *               stellarNetwork:
    *                 type: string
    *                 default: TESTNET
+   *                 example: TESTNET
    *               supporterAddress:
    *                 type: string
+   *                 example: GBZXN7PIRZGNMHGA7MUUUF4GWPY5AYPV6LY4UV2GL6VJGIQRXFDNMADI
    *               recipientAddress:
    *                 type: string
+   *                 example: GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3THOJ2E37CEGOEZWDSP
    *               profileId:
    *                 type: string
+   *                 example: clx1abc123
    *               supporterId:
    *                 type: string
+   *                 nullable: true
    *             required:
    *               - txHash
    *               - amount
@@ -2000,14 +2427,66 @@ export function createApp(customLogger?: Logger) {
    *     responses:
    *       201:
    *         description: Support transaction recorded
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               description: Created support transaction record
    *       400:
    *         description: Invalid request body
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   *             example:
+   *               error:
+   *                 formErrors: []
+   *                 fieldErrors:
+   *                   txHash: ["Required"]
+   *       401:
+   *         description: Missing or invalid JWT
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   *       409:
+   *         description: Duplicate transaction hash
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   *             example:
+   *               error: "Transaction already recorded"
+   *               code: "DUPLICATE_TX"
+   *               existingTxHash: "abc123def456789..."
    *       422:
-   *         description: Transaction rejected by Horizon
+   *         description: Transaction not found or rejected by Horizon
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   *             example:
+   *               error: "Transaction hash not found or not successful on Horizon."
+   *       429:
+   *         description: Rate limit exceeded
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
    *       503:
-   *         description: Horizon is unavailable
+   *         description: Horizon is unavailable (circuit breaker open)
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   *             example:
+   *               error: "Service unavailable: unable to verify transaction with Horizon."
    *       500:
    *         description: Internal server error
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
    */
   v1Router.post(
     "/support-transactions",
