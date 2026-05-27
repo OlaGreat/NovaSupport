@@ -688,23 +688,62 @@ export function createApp(customLogger?: Logger) {
     }
 
     try {
-      const profiles = await prisma.profile.findMany({
-        where: {
-          OR: [
-            { username: { contains: q, mode: "insensitive" } },
-            { displayName: { contains: q, mode: "insensitive" } },
-          ],
-        },
-        take: 10,
-        select: {
-          username: true,
-          displayName: true,
-          avatarUrl: true,
-          bio: true,
-        },
-      });
+      // Ensure pg_trgm extension is available
+      await prisma.$executeRawUnsafe("CREATE EXTENSION IF NOT EXISTS pg_trgm");
 
-      res.json(profiles);
+      const limit = Math.min(parseInt(req.query.limit as string) || 10, 50);
+
+      // Fuzzy search with relevance scoring using pg_trgm similarity
+      const profiles = await prisma.$queryRawUnsafe<
+        Array<{
+          username: string;
+          displayName: string;
+          avatarUrl: string | null;
+          bio: string;
+          relevance: number;
+        }>
+      >(
+        `SELECT
+          "username",
+          "displayName",
+          "avatarUrl",
+          "bio",
+          GREATEST(
+            similarity("username", $1),
+            similarity("displayName", $1)
+          ) AS relevance
+        FROM "Profile"
+        WHERE
+          similarity("username", $1) > 0.1
+          OR similarity("displayName", $1) > 0.1
+          OR "username" ILIKE '%' || $1 || '%'
+          OR "displayName" ILIKE '%' || $1 || '%'
+        ORDER BY relevance DESC, "username" ASC
+        LIMIT $2`,
+        q,
+        limit,
+      );
+
+      if (profiles.length === 0) {
+        // Return search suggestions when no results found
+        const suggestions = await prisma.$queryRawUnsafe<
+          Array<{ username: string; displayName: string }>
+        >(
+          `SELECT "username", "displayName"
+          FROM "Profile"
+          ORDER BY similarity("username", $1) DESC
+          LIMIT 3`,
+          q,
+        );
+
+        return res.json({
+          profiles: [],
+          suggestions: suggestions.map((s) => s.username),
+          message: "No profiles found. Did you mean one of these?",
+        });
+      }
+
+      res.json({ profiles, suggestions: [] });
     } catch (e: unknown) {
       req.log.error({ err: e }, "database error searching profiles");
       return sendError(res, 500, "Internal server error");

@@ -46,6 +46,11 @@ model Profile {
 
   @@index([createdAt(sort: Desc)])
   @@index([ownerId])
+  // Note: pg_trgm GIN indexes for fuzzy search are created at runtime
+  // via `CREATE EXTENSION IF NOT EXISTS pg_trgm` in the search endpoint.
+  // For production, add a migration:
+  //   CREATE INDEX idx_profile_username_trgm ON "Profile" USING GIN ("username" gin_trgm_ops);
+  //   CREATE INDEX idx_profile_displayname_trgm ON "Profile" USING GIN ("displayName" gin_trgm_ops);
 }
 
 model NotificationPreferences {
