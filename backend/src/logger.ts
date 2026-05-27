@@ -11,3 +11,7 @@ export const logger: Logger = pino({
   level: process.env.LOG_LEVEL ?? "info",
   transport: resolveTransport(),
 });
+
+export function childLogger(requestId: string): Logger {
+  return logger.child({ requestId });
+}

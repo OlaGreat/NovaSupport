@@ -45,6 +45,7 @@ declare global {
   namespace Express {
     interface Request {
       auth?: AuthContext;
+      requestId?: string;
     }
   }
 }
@@ -144,7 +145,11 @@ function sendError(
   message: string,
   code?: string,
 ) {
-  return res.status(status).json({ error: message, ...(code ? { code } : {}) });
+  const body: Record<string, unknown> = { error: message };
+  if (code) body.code = code;
+  const reqId = (res.req as express.Request).requestId;
+  if (reqId) body.requestId = reqId;
+  return res.status(status).json(body);
 }
 
 export function createApp(customLogger?: Logger) {
@@ -233,7 +238,22 @@ export function createApp(customLogger?: Logger) {
   app.use(compression({ threshold: 1024 }));
   app.use(sanitizeBody);
   app.use(sanitizeQuery);
-  app.use(pinoHttp({ logger: customLogger ?? logger }));
+
+  // ── Request ID middleware (#452) ──────────────────────────────────────
+  app.use((req, res, next) => {
+    const requestId =
+      (req.headers["x-request-id"] as string) || randomBytes(16).toString("hex");
+    req.requestId = requestId;
+    res.setHeader("X-Request-ID", requestId);
+    next();
+  });
+
+  app.use(
+    pinoHttp({
+      logger: customLogger ?? logger,
+      genReqId: (req) => req.requestId ?? randomBytes(16).toString("hex"),
+    }),
+  );
   // Attach Sentry request/tracing breadcrumbs when DSN is configured
   if (process.env.SENTRY_DSN) {
     app.use(Sentry.expressErrorHandler());
@@ -2839,14 +2859,14 @@ export function createApp(customLogger?: Logger) {
 
   // Generic error fallback (logs + returns JSON)
   app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
-    logger.error({ err, path: req.path, method: req.method }, "Unhandled application error");
+    logger.error({ err, path: req.path, method: req.method, requestId: req.requestId }, "Unhandled application error");
     if (process.env.SENTRY_DSN) {
       Sentry.captureException(err, {
-        extra: { path: req.path, method: req.method },
+        extra: { path: req.path, method: req.method, requestId: req.requestId },
       });
     }
     if (!res.headersSent) {
-      res.status(500).json({ error: "Internal server error" });
+      res.status(500).json({ error: "Internal server error", requestId: req.requestId });
     }
   });
 
