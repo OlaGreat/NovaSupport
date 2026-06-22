@@ -39,6 +39,8 @@ jobs:
   lighthouse:
     name: Lighthouse CI
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
     # Only run on PRs to avoid burning CI minutes on every push to main
     if: github.event_name == 'pull_request_target'
     defaults:
