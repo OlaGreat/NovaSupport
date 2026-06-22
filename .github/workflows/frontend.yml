@@ -73,6 +73,7 @@ jobs:
       - name: Comment PR with Lighthouse results
         uses: actions/github-script@v7
         if: github.event_name == 'pull_request_target' && always()
+        continue-on-error: true
         env:
           RESULTS_DIR: frontend/.lighthouseci/
         with:
