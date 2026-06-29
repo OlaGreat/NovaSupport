@@ -68,6 +68,16 @@ pub struct SupportEvent {
     pub timestamp: u64,
 }
 
+fn count_utf8_chars(s: &String) -> u32 {
+    let byte_len = s.len() as usize;
+    if byte_len > 1120 {
+        return 281;
+    }
+    let mut buf = [0u8; 1120];
+    s.copy_into_slice(&mut buf[..byte_len]);
+    buf[..byte_len].iter().filter(|&&b| (b & 0xC0) != 0x80).count() as u32
+}
+
 #[contract]
 pub struct SupportPageContract;
 
@@ -130,6 +140,10 @@ pub fn pause(e: Env) -> Result<(), Error> {
         .ok_or(Error::ContractNotInitialized)?;
     admin.require_auth();
 
+    e.storage()
+        .persistent()
+        .extend_ttl(&DataKey::Admin, LEDGERS_THRESHOLD, LEDGERS_TO_LIVE);
+
     e.storage().persistent().set(&DataKey::Paused, &true);
     e.storage()
         .persistent()
@@ -148,6 +162,10 @@ pub fn unpause(e: Env) -> Result<(), Error> {
         .get(&DataKey::Admin)
         .ok_or(Error::ContractNotInitialized)?;
     admin.require_auth();
+
+    e.storage()
+        .persistent()
+        .extend_ttl(&DataKey::Admin, LEDGERS_THRESHOLD, LEDGERS_TO_LIVE);
 
     e.storage().persistent().set(&DataKey::Paused, &false);
     e.storage()
@@ -185,6 +203,10 @@ pub fn unpause(e: Env) -> Result<(), Error> {
             return Err(Error::ContractPaused);
         }
 
+        e.storage()
+            .persistent()
+            .extend_ttl(&DataKey::Admin, LEDGERS_THRESHOLD, LEDGERS_TO_LIVE);
+
         // Validate amount
         if o < 0 {
             return Err(Error::NegativeAmount);
@@ -193,11 +215,8 @@ pub fn unpause(e: Env) -> Result<(), Error> {
             return Err(Error::ZeroAmount);
         }
 
-        // Validate message length (max 280 characters like Twitter)
-        if m.len() == 0 {
-            return Err(Error::EmptyMessage);
-        }
-        if m.len() > 280 {
+        // Validate message length (max 280 Unicode code points like Twitter)
+        if count_utf8_chars(&m) > 280 {
             return Err(Error::MessageTooLong);
         }
 
@@ -280,7 +299,21 @@ pub fn unpause(e: Env) -> Result<(), Error> {
         if !e.storage().persistent().has(&DataKey::Admin) {
             return Err(Error::ContractNotInitialized);
         }
-        
+
+        // Check if contract is paused
+        let paused: bool = e
+            .storage()
+            .persistent()
+            .get(&DataKey::Paused)
+            .unwrap_or(false);
+        if paused {
+            return Err(Error::ContractPaused);
+        }
+
+        e.storage()
+            .persistent()
+            .extend_ttl(&DataKey::Admin, LEDGERS_THRESHOLD, LEDGERS_TO_LIVE);
+
         // Only recipient can withdraw their funds
         if caller != recipient {
             return Err(Error::NotRecipient);
@@ -849,7 +882,6 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #4)")] // Error::EmptyMessage
     fn support_with_empty_message() {
         let e = Env::default();
         e.mock_all_auths();
@@ -867,13 +899,107 @@ mod test {
 
         client.initialize(&admin);
 
-        client.support(
+        let count = client.support(
             &supporter,
             &recipient,
             &asset,
             &1000_i128,
             &String::from_str(&e, "XLM"),
             &String::from_str(&e, ""),
+        );
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #200)")] // Error::ContractPaused
+    fn withdraw_fails_when_contract_is_paused() {
+        let e = Env::default();
+        e.mock_all_auths();
+        let contract_id = e.register(SupportPageContract, ());
+        let client = SupportPageContractClient::new(&e, &contract_id);
+
+        let supporter = Address::generate(&e);
+        let recipient = Address::generate(&e);
+        let admin = Address::generate(&e);
+        let asset = e
+            .register_stellar_asset_contract_v2(admin.clone())
+            .address();
+        let token_admin = soroban_sdk::token::StellarAssetClient::new(&e, &asset);
+        token_admin.mint(&supporter, &10_000_i128);
+
+        client.initialize(&admin);
+        client.support(
+            &supporter,
+            &recipient,
+            &asset,
+            &10_000_i128,
+            &String::from_str(&e, "XLM"),
+            &String::from_str(&e, "Support"),
+        );
+
+        client.pause();
+        client.withdraw(&recipient, &recipient, &asset, &5_000_i128);
+    }
+
+    #[test]
+    fn unicode_message_counted_in_chars_not_bytes() {
+        let e = Env::default();
+        e.mock_all_auths();
+        let contract_id = e.register(SupportPageContract, ());
+        let client = SupportPageContractClient::new(&e, &contract_id);
+
+        let supporter = Address::generate(&e);
+        let recipient = Address::generate(&e);
+        let admin = Address::generate(&e);
+        let asset = e
+            .register_stellar_asset_contract_v2(admin.clone())
+            .address();
+        let token_admin = soroban_sdk::token::StellarAssetClient::new(&e, &asset);
+        token_admin.mint(&supporter, &10_000_i128);
+
+        client.initialize(&admin);
+
+        // 280 Japanese chars = 840 bytes — should pass with char counting
+        let japanese_msg = "本".repeat(280);
+        let count = client.support(
+            &supporter,
+            &recipient,
+            &asset,
+            &1000_i128,
+            &String::from_str(&e, "XLM"),
+            &String::from_str(&e, &japanese_msg),
+        );
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #5)")] // Error::MessageTooLong
+    fn unicode_message_too_long() {
+        let e = Env::default();
+        e.mock_all_auths();
+        let contract_id = e.register(SupportPageContract, ());
+        let client = SupportPageContractClient::new(&e, &contract_id);
+
+        let supporter = Address::generate(&e);
+        let recipient = Address::generate(&e);
+        let admin = Address::generate(&e);
+        let asset = e
+            .register_stellar_asset_contract_v2(admin.clone())
+            .address();
+        let token_admin = soroban_sdk::token::StellarAssetClient::new(&e, &asset);
+        token_admin.mint(&supporter, &10_000_i128);
+
+        client.initialize(&admin);
+
+        // 281 Japanese chars = 843 bytes — must fail
+        let japanese_msg = "本".repeat(281);
+        client.support(
+            &supporter,
+            &recipient,
+            &asset,
+            &1000_i128,
+            &String::from_str(&e, "XLM"),
+            &String::from_str(&e, &japanese_msg),
         );
     }
 
