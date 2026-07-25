@@ -29,9 +29,11 @@ export async function apiFetch(
       window.location.pathname + window.location.search,
     );
 
-    // Use history.replaceState to preserve history stack instead of window.location.href
-    window.history.replaceState(null, "", "/");
-    window.location.reload();
+    // #826: A full window.location.reload() destroys any in-progress form
+    // state (e.g. the edit-profile form or dashboard toggles) the instant a
+    // token expires. Dispatch an event instead and let AuthExpiredListener
+    // (mounted in Providers) show a re-auth prompt without a hard navigation.
+    window.dispatchEvent(new CustomEvent("auth:expired"));
   }
 
   return res;
