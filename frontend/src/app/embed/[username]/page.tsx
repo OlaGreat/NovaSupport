@@ -24,11 +24,12 @@ type ProfileStats = {
   assetTotals: Array<{ assetCode: string; total: string }>;
 };
 
-type LeaderboardEntry = {
-  rank: number;
-  supporterAddress: string;
-  totalAmount: string;
+type SupportTx = {
+  txHash: string;
+  amount: string;
   assetCode: string;
+  createdAt: string;
+  supporterAddress: string | null;
 };
 
 async function getProfile(username: string): Promise<Profile | null> {
@@ -47,13 +48,14 @@ async function getStats(username: string): Promise<ProfileStats | null> {
   return res.json();
 }
 
-async function getLeaderboard(username: string): Promise<LeaderboardEntry[]> {
-  const res = await fetch(`${API_BASE_URL}/profiles/${username}/leaderboard`, {
-    next: { revalidate: 60 },
-  });
+async function getRecentTransactions(username: string): Promise<SupportTx[]> {
+  const res = await fetch(
+    `${API_BASE_URL}/profiles/${username}/transactions?limit=5`,
+    { next: { revalidate: 30 } },
+  );
   if (!res.ok) return [];
-  const body = await res.json() as { leaderboard?: LeaderboardEntry[] };
-  return (body.leaderboard ?? []).slice(0, 5);
+  const body = await res.json() as { transactions?: SupportTx[] };
+  return body.transactions ?? [];
 }
 
 export async function generateMetadata({ params }: { params: { username: string } }): Promise<Metadata> {
@@ -69,9 +71,9 @@ export default async function EmbedPage({ params, searchParams }: PageProps) {
   const profile = await getProfile(params.username);
   if (!profile) notFound();
 
-  const [stats, leaderboard] = await Promise.all([
+  const [stats, recentTransactions] = await Promise.all([
     getStats(params.username),
-    getLeaderboard(params.username),
+    getRecentTransactions(params.username),
   ]);
 
   const theme: EmbedTheme =
@@ -85,11 +87,13 @@ export default async function EmbedPage({ params, searchParams }: PageProps) {
 
   const profileUrl = `${SITE_URL}/profile/${profile.username}`;
 
-  const recentSupporters = leaderboard.map((e) => ({
-    supporterAddress: e.supporterAddress,
-    totalAmount: e.totalAmount,
-    assetCode: e.assetCode,
-  }));
+  const recentSupporters = recentTransactions
+    .filter((tx): tx is SupportTx & { supporterAddress: string } => Boolean(tx.supporterAddress))
+    .map((tx) => ({
+      supporterAddress: tx.supporterAddress,
+      totalAmount: tx.amount,
+      assetCode: tx.assetCode,
+    }));
 
   return (
     <html lang="en">
