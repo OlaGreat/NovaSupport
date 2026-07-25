@@ -11,6 +11,11 @@ html,
 body {
   margin: 0;
   padding: 0;
+  /* The embed route is meant to render transparently inside a host page's
+     iframe. It still inherits the root layout's <html>/<body>, whose
+     globals.css sets an opaque gradient background — override it here so
+     the widget doesn't show a solid background box in embeds. */
+  background: transparent !important;
 }
 
 .w-full {
