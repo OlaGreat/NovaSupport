@@ -80,7 +80,7 @@ npm run db:seed
 npm run dev
 ```
 
-Runs on `http://localhost:4000`.
+Runs on `http://localhost:4001`.
 
 ### 3. Contract
 
