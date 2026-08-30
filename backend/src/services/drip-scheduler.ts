@@ -63,7 +63,7 @@ export async function processDueRecurringSupports(prismaClient = prisma, now = n
       const claimed = await prismaClient.$executeRaw`
         UPDATE "RecurringSupport"
         SET "nextRunAt" = ${nextRunAt}
-        WHERE id = ${support.id} AND "nextRunAt" <= ${now}
+        WHERE id = ${support.id} AND "nextRunAt" <= ${now} AND "status" = 'active'
       `;
 
       if (claimed === 0) {

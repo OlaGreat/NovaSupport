@@ -67,8 +67,20 @@ export async function deliverWebhook(
         "X-NovaSupport-Event": (payload.event as string) ?? "unknown",
       },
       body: payloadString,
+      redirect: "manual",
       signal: mergedSignal,
     });
+
+    if (
+      response.type === "opaqueredirect" ||
+      (response.status >= 300 && response.status < 400)
+    ) {
+      return {
+        status: "failed",
+        error: "HTTP 3xx redirects are not allowed",
+        willRetry: false,
+      };
+    }
 
     if (response.ok) {
       return { status: "success", statusCode: response.status };

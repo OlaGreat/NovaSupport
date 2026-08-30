@@ -2933,7 +2933,6 @@ All errors return JSON with an \`error\` field and optional \`code\`:
       const profile = await resolveProfileOwner(req.params.username as string, req.auth, res);
       if (!profile) return;
 
-    try {
       const result = await prisma.$transaction(
         async (tx) => {
           const existingCount = await tx.webhook.count({
