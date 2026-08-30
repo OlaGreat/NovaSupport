@@ -231,6 +231,60 @@ describe("Sanitization Security Tests", () => {
       assert.strictEqual(result, "");
       assert.ok(violations.some((v) => v.includes("Private/local")));
     });
+
+    it("should block cloud instance-metadata endpoint (169.254.169.254)", () => {
+      const { result, violations } = sanitizeString(
+        "websiteUrl",
+        "http://169.254.169.254/latest/meta-data",
+      );
+      assert.strictEqual(result, "");
+      assert.ok(violations.some((v) => v.includes("Private/local")));
+    });
+
+    it("should block link-local addresses in the 169.254.0.0/16 range", () => {
+      const { result, violations } = sanitizeString(
+        "webhookUrl",
+        "http://169.254.1.22/hook",
+      );
+      assert.strictEqual(result, "");
+      assert.ok(violations.some((v) => v.includes("Private/local")));
+    });
+
+    it("should block IPv6 loopback addresses", () => {
+      const { result, violations } = sanitizeString(
+        "webhookUrl",
+        "https://[::1]/hook",
+      );
+      assert.strictEqual(result, "");
+      assert.ok(violations.some((v) => v.includes("Private/local")));
+    });
+
+    it("should block IPv6 unique-local (fc00::/7) addresses", () => {
+      const { result, violations } = sanitizeString(
+        "webhookUrl",
+        "http://[fd00::1]/hook",
+      );
+      assert.strictEqual(result, "");
+      assert.ok(violations.some((v) => v.includes("Private/local")));
+    });
+
+    it("should block IPv4-mapped IPv6 addresses of private ranges", () => {
+      const { result, violations } = sanitizeString(
+        "webhookUrl",
+        "http://[::ffff:127.0.0.1]/hook",
+      );
+      assert.strictEqual(result, "");
+      assert.ok(violations.some((v) => v.includes("Private/local")));
+    });
+
+    it("should allow public IPv6 literals", () => {
+      const { result, violations } = sanitizeString(
+        "websiteUrl",
+        "https://[2606:4700:4700::1111]",
+      );
+      assert.strictEqual(result, "https://[2606:4700:4700::1111]/");
+      assert.ok(!violations.some((v) => v.includes("Private/local")));
+    });
   });
 
   describe("Email Validation", () => {

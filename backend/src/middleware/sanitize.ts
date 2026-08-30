@@ -1,6 +1,33 @@
 import type { Request, Response, NextFunction } from "express";
 import sanitizeHtml from "sanitize-html";
+import { BlockList, isIP } from "node:net";
 import { logger } from "../logger.js";
+
+const PRIVATE_IP_RANGES = new BlockList();
+PRIVATE_IP_RANGES.addSubnet("127.0.0.0", 8, "ipv4");
+PRIVATE_IP_RANGES.addSubnet("10.0.0.0", 8, "ipv4");
+PRIVATE_IP_RANGES.addSubnet("172.16.0.0", 12, "ipv4");
+PRIVATE_IP_RANGES.addSubnet("192.168.0.0", 16, "ipv4");
+PRIVATE_IP_RANGES.addSubnet("169.254.0.0", 16, "ipv4");
+PRIVATE_IP_RANGES.addSubnet("::1", 128, "ipv6");
+PRIVATE_IP_RANGES.addSubnet("::", 128, "ipv6");
+PRIVATE_IP_RANGES.addSubnet("fc00::", 7, "ipv6");
+PRIVATE_IP_RANGES.addSubnet("fe80::", 10, "ipv6");
+
+function isPrivateHostname(hostname: string): boolean {
+  if (hostname === "localhost") return true;
+
+  const address = hostname.replace(/^\[|\]$/g, "");
+  const family = isIP(address);
+  if (family === 0) return false;
+
+  if (family === 6) {
+    const mapped = address.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
+    if (mapped) return PRIVATE_IP_RANGES.check(mapped[1], "ipv4");
+  }
+
+  return PRIVATE_IP_RANGES.check(address, family === 4 ? "ipv4" : "ipv6");
+}
 
 const STRIP_ALL_HTML: sanitizeHtml.IOptions = {
   allowedTags: [],
@@ -130,13 +157,7 @@ function normalizeUrl(value: string): { url: string | null; violations: string[]
 
     // Block localhost and private IPs for security
     const hostname = url.hostname.toLowerCase();
-    if (
-      hostname === "localhost" ||
-      hostname.startsWith("127.") ||
-      hostname.startsWith("192.168.") ||
-      hostname.startsWith("10.") ||
-      hostname.match(/^172\.(1[6-9]|2[0-9]|3[01])\./)
-    ) {
+    if (isPrivateHostname(hostname)) {
       violations.push("Private/local URLs are not allowed");
       return { url: null, violations };
     }
