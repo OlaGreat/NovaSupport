@@ -41,7 +41,6 @@ pub enum DataKey {
     SupportCount,
     RecipientCount(Address),
     RecipientTotal(Address, Address), // (Recipient, Asset)
-    TotalByAsset(Address, Address), // (Recipient, Asset)
     Admin,
     Paused,
 }
@@ -198,19 +197,6 @@ pub fn unpause(e: Env) -> Result<(), Error> {
         st.set(&total_key, &(total + o));
         st.extend_ttl(&total_key, LEDGERS_THRESHOLD, LEDGERS_TO_LIVE);
 
-        let asset_total: i128 = st
-            .get(&DataKey::TotalByAsset(r.clone(), asset.clone()))
-            .unwrap_or(0);
-        st.set(
-            &DataKey::TotalByAsset(r.clone(), asset.clone()),
-            &(asset_total + o),
-        );
-        st.extend_ttl(
-            &DataKey::TotalByAsset(r.clone(), asset.clone()),
-            LEDGERS_THRESHOLD,
-            LEDGERS_TO_LIVE,
-        );
-
         let tt = symbol_short!("support");
         let ev = SupportEvent {
             supporter: s.clone(),
@@ -273,7 +259,7 @@ pub fn unpause(e: Env) -> Result<(), Error> {
         }
 
         let st = e.storage().persistent();
-        let key = DataKey::TotalByAsset(recipient.clone(), asset.clone());
+        let key = DataKey::RecipientTotal(recipient.clone(), asset.clone());
 
         // Distinguish a recipient the contract has never seen from a known
         // recipient whose balance has already been withdrawn to zero.
@@ -291,19 +277,9 @@ pub fn unpause(e: Env) -> Result<(), Error> {
             return Err(Error::WithdrawAmountExceedsBalance);
         }
 
-        // Effects: update all storage BEFORE the external token transfer (CEI)
+        // Effects: update storage BEFORE the external token transfer (CEI)
         st.set(&key, &(balance - amount));
         st.extend_ttl(&key, LEDGERS_THRESHOLD, LEDGERS_TO_LIVE);
-
-        let recipient_total_key = DataKey::RecipientTotal(recipient.clone(), asset.clone());
-        let recipient_total: i128 = st.get(&recipient_total_key).unwrap_or(0);
-        let new_recipient_total = if recipient_total >= amount {
-            recipient_total - amount
-        } else {
-            0
-        };
-        st.set(&recipient_total_key, &new_recipient_total);
-        st.extend_ttl(&recipient_total_key, LEDGERS_THRESHOLD, LEDGERS_TO_LIVE);
 
         // Emit a withdraw event
         e.events()
@@ -337,10 +313,7 @@ pub fn unpause(e: Env) -> Result<(), Error> {
     }
 
     pub fn get_total_by_asset(e: Env, r: Address, asset: Address) -> i128 {
-        e.storage()
-            .persistent()
-            .get(&DataKey::TotalByAsset(r, asset))
-            .unwrap_or(0)
+        Self::get_recipient_total(e, r, asset)
     }
 }
 
@@ -910,7 +883,7 @@ mod test {
         // below a recipient's recorded total.
         e.as_contract(&contract_id, || {
             e.storage().persistent().set(
-                &DataKey::TotalByAsset(recipient.clone(), asset.clone()),
+                &DataKey::RecipientTotal(recipient.clone(), asset.clone()),
                 &1_000_000_i128,
             );
         });
