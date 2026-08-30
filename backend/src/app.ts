@@ -2926,11 +2926,12 @@ All errors return JSON with an \`error\` field and optional \`code\`:
   }
 
   v1Router.post("/profiles/:username/webhooks", requireAuth, async (req, res) => {
-    const parsed = webhookCreateSchema.safeParse(req.body);
-    if (!parsed.success) return sendError(res, 400, "Invalid URL — must be a valid HTTPS URL");
+    try {
+      const parsed = webhookCreateSchema.safeParse(req.body);
+      if (!parsed.success) return sendError(res, 400, "Invalid URL — must be a valid HTTPS URL");
 
-    const profile = await resolveProfileOwner(req.params.username as string, req.auth, res);
-    if (!profile) return;
+      const profile = await resolveProfileOwner(req.params.username as string, req.auth, res);
+      if (!profile) return;
 
     try {
       const result = await prisma.$transaction(
@@ -3421,7 +3422,9 @@ All errors return JSON with an \`error\` field and optional \`code\`:
             existingTxHash,
           });
         }
-        throw error;
+        // Handle other database errors gracefully instead of crashing the process
+        req.log.error({ err: error, txHash: parsed.data.txHash }, "Database error recording support transaction");
+        return sendError(res, 500, "Internal server error");
       }
 
       // Notify creator (async, best-effort) — respects NotificationPreferences

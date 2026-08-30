@@ -403,7 +403,7 @@ async function suiteExponentialBackoff() {
     assert.strictEqual(attempt, 3, "Should retry twice before succeeding");
   });
 
-  await test("returns 'error' after exhausting all retries", async () => {
+  await test("throws after exhausting all retries", async () => {
     let attempt = 0;
     const server = {
       transactions: () => ({
@@ -419,8 +419,13 @@ async function suiteExponentialBackoff() {
       }),
     } as unknown as Horizon.Server;
 
-    const result = await verifyTransaction(server, "exhaust-hash", 3, 10);
-    assert.strictEqual(result, "error");
+    await assert.rejects(
+      async () => verifyTransaction(server, "exhaust-hash", 3, 10),
+      (err: any) => {
+        assert.ok(err instanceof Error, "Should throw an Error");
+        return true;
+      }
+    );
     assert.strictEqual(attempt, 3, "Should attempt exactly 3 times");
   });
 
