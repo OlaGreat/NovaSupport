@@ -6,7 +6,6 @@ on:
       - "frontend/**"
       - ".github/workflows/frontend.yml"
       - "lighthouserc.js"
-      - "budget.json"
   push:
     branches:
       - main
@@ -14,7 +13,6 @@ on:
       - "frontend/**"
       - ".github/workflows/frontend.yml"
       - "lighthouserc.js"
-      - "budget.json"
 
 jobs:
   frontend:
