@@ -260,7 +260,12 @@ export class EventIndexer {
       logger.info({ resolved }, "resolved orphaned transactions to profiles");
     }
 
-    Metrics.orphanCount(orphans.length - resolved);
+    // Use the true backlog count (unbounded) for the metric so alerting
+    // reflects the real severity, not just the processing page size.
+    const trueBacklog = await this.prisma.supportTransaction.count({
+      where: { profileId: "__orphan__" },
+    });
+    Metrics.orphanCount(trueBacklog);
     return resolved;
   }
 

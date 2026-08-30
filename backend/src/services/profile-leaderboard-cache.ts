@@ -108,11 +108,12 @@ export async function invalidateProfileLeaderboardCache(profileId: string): Prom
         await redis.del(...keys);
       }
     } catch {
-      invalidateInProcessCache(profileId);
+      // Redis error handled below — in-process cache is always invalidated
     }
-    return;
   }
 
+  // Always clear the in-process fallback cache regardless of the Redis path,
+  // so a stale entry can never be served after this call reports success.
   invalidateInProcessCache(profileId);
 }
 

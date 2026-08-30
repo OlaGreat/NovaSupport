@@ -3726,6 +3726,15 @@ All errors return JSON with an \`error\` field and optional \`code\`:
         return sendError(res, 400, "startDate must be before endDate");
       }
 
+      // Cap the date range to 2 years to prevent the gap-fill loop from
+      // blocking the event loop on arbitrarily wide unauthenticated requests.
+      const MAX_RANGE_MS = 2 * 365 * 24 * 60 * 60 * 1000;
+      const rangeStart = start ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const rangeEnd = end ?? new Date();
+      if (rangeEnd.getTime() - rangeStart.getTime() > MAX_RANGE_MS) {
+        return sendError(res, 400, "Date range must not exceed 2 years");
+      }
+
       if (format === "csv") {
         const MAX_EXPORT_ROWS = 10_000;
         const transactions = await prisma.supportTransaction.findMany({
@@ -4809,6 +4818,13 @@ All errors return JSON with an \`error\` field and optional \`code\`:
 
     if (isNaN(to.getTime()) || isNaN(from.getTime())) {
       return res.status(400).json({ error: "Invalid from or to date" });
+    }
+
+    // Reject requests spanning more than 2 years to prevent the fillGaps
+    // loop from blocking the event loop on wide unauthenticated requests.
+    const MAX_RANGE_MS = 2 * 365 * 24 * 60 * 60 * 1000;
+    if (to.getTime() - from.getTime() > MAX_RANGE_MS) {
+      return res.status(400).json({ error: "Date range must not exceed 2 years" });
     }
 
     const profile = await prisma.profile.findUnique({
