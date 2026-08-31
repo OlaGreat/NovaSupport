@@ -635,7 +635,14 @@ mod test {
             &String::from_str(&e, "Support"),
         );
 
-        // Try to withdraw more than balance
+        // Fund the contract with more real tokens than the recipient's
+        // recorded total, so the external balance() check (which now runs
+        // first — see the reentrancy fix in #1040) passes and the withdrawal
+        // is rejected for exceeding the *recorded* total, not the contract's
+        // real token balance.
+        token_admin.mint(&contract_id, &5_000_i128);
+
+        // Try to withdraw more than the recorded total
         client.withdraw(&recipient, &recipient, &asset, &15_000_i128);
     }
 
@@ -810,8 +817,16 @@ mod test {
         let asset = e
             .register_stellar_asset_contract_v2(admin.clone())
             .address();
+        let token_admin = soroban_sdk::token::StellarAssetClient::new(&e, &asset);
 
         client.initialize(&admin);
+
+        // Fund the contract directly (bypassing support()) so the external
+        // balance() check — which now runs first, see the reentrancy fix in
+        // #1040 — passes, and the withdrawal is rejected because this
+        // recipient has no recorded total, not because the contract lacks
+        // real tokens.
+        token_admin.mint(&contract_id, &1000_i128);
 
         // Try to withdraw without any support received
         client.withdraw(&recipient, &recipient, &asset, &1000_i128);
@@ -848,6 +863,13 @@ mod test {
         // to the contract, so the second call must be ZeroBalance, not
         // RecipientNotFound.
         client.withdraw(&recipient, &recipient, &asset, &10_000_i128);
+
+        // Fund the contract directly (bypassing support()) so the external
+        // balance() check — which now runs first, see the reentrancy fix in
+        // #1040 — passes, and the second withdrawal is rejected because this
+        // recipient's recorded total is zero, not because the contract lacks
+        // real tokens.
+        token_admin.mint(&contract_id, &1_i128);
         client.withdraw(&recipient, &recipient, &asset, &1_i128);
     }
 
