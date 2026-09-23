@@ -49,6 +49,7 @@ export async function sendWeeklyDigests(prismaClient = prisma) {
             where: {
               profileId: profile.id,
               supporterAddress: { not: null },
+              status: { not: "failed" },
               createdAt: { gte: sevenDaysAgo },
             },
             distinct: ["supporterAddress"],
