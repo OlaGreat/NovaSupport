@@ -195,3 +195,53 @@ test("escapeHtml leaves clean strings unchanged", () => {
   assert.equal(escapeHtml("XLM"), "XLM");
   assert.equal(escapeHtml("USDC"), "USDC");
 });
+
+
+test("issue #1120: unique supporter query excludes failed transactions", async () => {
+  const mockPrisma = makePrismaMock({ profiles: [makeProfile()], transactions: [] });
+
+  await sendWeeklyDigests(mockPrisma as any);
+
+  const calls = (mockPrisma.supportTransaction.findMany as any).mock.calls;
+  const uniqueCall = calls.find((call: any) => call.arguments?.[0]?.distinct?.includes("supporterAddress"));
+  assert.ok(uniqueCall, "expected unique supporter query to run");
+
+  const where = uniqueCall.arguments[0].where;
+  assert.deepEqual(
+    where.status,
+    { not: "failed" },
+    "unique supporter query must exclude failed transactions",
+  );
+});
+
+
+test("issue #1120 adversarial: supporter query keeps profile, address, time and failed-status boundaries together", async () => {
+  const mockPrisma = makePrismaMock({ profiles: [makeProfile()], transactions: [] });
+
+  await sendWeeklyDigests(mockPrisma as any);
+
+  const calls = (mockPrisma.supportTransaction.findMany as any).mock.calls;
+  const uniqueCall = calls.find((call: any) => call.arguments?.[0]?.distinct?.includes("supporterAddress"));
+  assert.ok(uniqueCall, "expected unique supporter query to run");
+
+  const arg = uniqueCall.arguments[0];
+  assert.deepEqual(arg.distinct, ["supporterAddress"]);
+  assert.deepEqual(arg.select, { supporterAddress: true });
+  assert.equal(arg.where.profileId, "profile-1");
+  assert.deepEqual(arg.where.supporterAddress, { not: null });
+  assert.deepEqual(arg.where.status, { not: "failed" });
+  assert.ok(arg.where.createdAt?.gte instanceof Date, "weekly boundary must remain a Date");
+});
+
+test("issue #1120 adversarial: failed-status exclusion is bound to the distinct supporter query", async () => {
+  const mockPrisma = makePrismaMock({ profiles: [makeProfile()], transactions: [] });
+
+  await sendWeeklyDigests(mockPrisma as any);
+
+  const calls = (mockPrisma.supportTransaction.findMany as any).mock.calls;
+  const supporterCalls = calls.filter((call: any) =>
+    call.arguments?.[0]?.distinct?.includes("supporterAddress"),
+  );
+  assert.equal(supporterCalls.length, 1, "expected exactly one distinct supporter query");
+  assert.deepEqual(supporterCalls[0].arguments[0].where.status, { not: "failed" });
+});
