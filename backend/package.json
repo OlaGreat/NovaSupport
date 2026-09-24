@@ -28,7 +28,7 @@
     "@sentry/node": "^8.55.2",
     "@stellar/stellar-sdk": "^14.6.1",
     "@supabase/supabase-js": "^2.100.1",
-    "bullmq": "^5.81.2",
+    "bullmq": "^6.3.8",
     "compression": "^1.8.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
