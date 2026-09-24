@@ -58,7 +58,7 @@
     "@types/sanitize-html": "^2.16.1",
     "@types/swagger-jsdoc": "^6.0.4",
     "@types/swagger-ui-express": "^4.1.8",
-    "@typescript-eslint/eslint-plugin": "^8.57.2",
+    "@typescript-eslint/eslint-plugin": "^8.70.0",
     "@typescript-eslint/parser": "^8.57.2",
     "eslint": "^10.1.0",
     "fast-check": "^3.23.2",
