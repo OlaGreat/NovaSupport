@@ -1536,7 +1536,7 @@ All errors return JSON with an \`error\` field and optional \`code\`:
    */
   // #463 — view count: increment once per IP per hour via viewCountLimiter
 //   app.get("/profiles/:username", async (req, res) => {
-  v1Router.get("/profiles/:username", optionalAuth, async (req, res) => {
+  v1Router.get("/profiles/:username", viewCountLimiter, optionalAuth, async (req, res) => {
     try {
       const profile = await prisma.profile.findUnique({
         where: { username: req.params.username as string },
@@ -1588,8 +1588,12 @@ All errors return JSON with an \`error\` field and optional \`code\`:
     }
   });
 
-  // Apply per-IP view count limiter (rate-limits the increment, not the read)
-  app.use("/profiles/:username", viewCountLimiter);
+  // The per-IP view count limiter is attached to the canonical route itself
+  // (v1Router.get("/profiles/:username", viewCountLimiter, ...)). Mounting it on
+  // `app` at /profiles/:username never matched /v1/profiles/:username — the only
+  // path this handler answers — and could not have run anyway, because Express
+  // runs middleware in registration order and the handler above would already
+  // have responded (#1191).
 
 //   app.get("/profiles/:username/stats", async (req, res) => {
   v1Router.get("/profiles/:username/stats", async (req, res) => {
