@@ -51,6 +51,7 @@ import {
 } from "./services/verify-transaction.js";
 import { checkAndAwardBadges } from "./services/badge-awarder.js";
 import { getMetricsText } from "./metrics.js";
+import { validateWebhookUrl } from "./utils/url-validator.js";
 
 // Extend Express Request to include auth context
 declare global {
@@ -3016,6 +3017,11 @@ All errors return JSON with an \`error\` field and optional \`code\`:
       const parsed = webhookCreateSchema.safeParse(req.body);
       if (!parsed.success) return sendError(res, 400, "Invalid URL — must be a valid HTTPS URL");
 
+    const ssrfError = await validateWebhookUrl(parsed.data.url);
+    if (ssrfError) return sendError(res, 400, ssrfError);
+
+    const profile = await resolveProfileOwner(req.params.username as string, req.auth, res);
+    if (!profile) return;
       const profile = await resolveProfileOwner(req.params.username as string, req.auth, res);
       if (!profile) return;
 
@@ -3450,7 +3456,7 @@ All errors return JSON with an \`error\` field and optional \`code\`:
             });
           }
 
-          if (parsed.data.status === "SUCCESS") {
+          if (verification === true) {
             const milestones = await tx.milestone.findMany({
               where: {
                 profileId: parsed.data.profileId,
@@ -3468,7 +3474,7 @@ All errors return JSON with an \`error\` field and optional \`code\`:
                 },
               });
 
-              if (Number(updated.currentAmount) >= Number(updated.targetAmount)) {
+              if (updated.currentAmount.greaterThanOrEqualTo(updated.targetAmount)) {
                 await tx.milestone.update({
                   where: { id: milestone.id },
                   data: {
