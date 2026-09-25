@@ -186,12 +186,12 @@ function PreferenceRow({
   knobClass: (on: boolean) => string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
-      <div className="min-w-0">
-        <p className="text-sm font-medium text-white">{label}</p>
-        <p className="text-xs text-white/40 mt-0.5">{description}</p>
-      </div>
-      <div className="flex items-center gap-2 flex-shrink-0">
+    <label className="flex items-center justify-between gap-4 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3 cursor-pointer">
+      <span className="min-w-0 block">
+        <span className="text-sm font-medium text-white block">{label}</span>
+        <span className="text-xs text-white/40 mt-0.5 block">{description}</span>
+      </span>
+      <span className="flex items-center gap-2 flex-shrink-0">
         {saved && (
           <span className="flex items-center gap-0.5 text-[10px] text-mint">
             <Check size={10} />
@@ -199,6 +199,7 @@ function PreferenceRow({
           </span>
         )}
         <button
+          type="button"
           role="switch"
           aria-checked={checked}
           onClick={onToggle}
@@ -207,7 +208,7 @@ function PreferenceRow({
         >
           <span className={knobClass(checked)} />
         </button>
-      </div>
-    </div>
+      </span>
+    </label>
   );
 }
