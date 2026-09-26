@@ -1,10 +1,11 @@
 "use client";
-import { useState, useCallback, KeyboardEvent } from "react";
+import { useState, useEffect, useCallback, KeyboardEvent } from "react";
 import Image from "next/image";
 import { isValidStellarAddress, stellarExpertUrl } from "@/lib/stellar";
 import { useToast } from "@/lib/use-toast";
 import { API_BASE_URL, SITE_URL } from "@/lib/config";
 import { apiFetch } from "@/lib/api-client";
+import { getStoredWalletAddress } from "@/lib/wallet-adapters";
 
 import { ProfileCardSkeleton } from "./skeleton";
 
@@ -53,13 +54,16 @@ export function ProfileCard({
   const [linkCopied, setLinkCopied] = useState(false);
   const [resending, setResending] = useState(false);
   const [resendSent, setResendSent] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
   const { showToast } = useToast();
+
+  useEffect(() => {
+    const storedAddress = getStoredWalletAddress();
+    setIsOwner(Boolean(storedAddress && storedAddress === walletAddress));
+  }, [walletAddress]);
 
   const isValid = isValidStellarAddress(walletAddress);
   const hasSocialLinks = email || websiteUrl || twitterHandle || githubHandle;
-
-  const currentWallet = typeof window !== 'undefined' ? localStorage.getItem('walletAddress') : null;
-  const isOwner = currentWallet === walletAddress;
 
   const handleResend = async () => {
     setResending(true);
