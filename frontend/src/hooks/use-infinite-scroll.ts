@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef } from "react";
 
 interface UseInfiniteScrollOptions {
   onLoadMore: () => void;
@@ -13,39 +13,38 @@ export function useInfiniteScroll({
   isLoading,
   threshold = 0.8,
 }: UseInfiniteScrollOptions) {
-  const observerRef = useRef<IntersectionObserver | null>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  const handleIntersection = useCallback(
-    (entries: IntersectionObserverEntry[]) => {
-      const [entry] = entries;
-      if (entry.isIntersecting && hasMore && !isLoading) {
-        onLoadMore();
-      }
-    },
-    [hasMore, isLoading, onLoadMore]
-  );
+  // Keep a ref to the latest values so the stable intersection callback
+  // always sees current state without being recreated on every change.
+  const stateRef = useRef({ hasMore, isLoading, onLoadMore });
+  stateRef.current = { hasMore, isLoading, onLoadMore };
 
   useEffect(() => {
-    const options = {
+    const options: IntersectionObserverInit = {
       root: null,
       rootMargin: "0px",
       threshold,
     };
 
-    observerRef.current = new IntersectionObserver(handleIntersection, options);
+    // Stable callback — reads from the ref, never recreated due to state changes.
+    const observer = new IntersectionObserver((entries) => {
+      const [entry] = entries;
+      if (entry.isIntersecting && stateRef.current.hasMore && !stateRef.current.isLoading) {
+        stateRef.current.onLoadMore();
+      }
+    }, options);
 
     const currentSentinel = sentinelRef.current;
     if (currentSentinel) {
-      observerRef.current.observe(currentSentinel);
+      observer.observe(currentSentinel);
     }
 
     return () => {
-      if (observerRef.current && currentSentinel) {
-        observerRef.current.unobserve(currentSentinel);
-      }
+      // disconnect() releases the observer entirely, not just one target.
+      observer.disconnect();
     };
-  }, [handleIntersection, threshold]);
+  }, [threshold]); // only rebuilds if the intersection threshold itself changes
 
   return sentinelRef;
 }
