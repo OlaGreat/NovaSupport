@@ -1194,7 +1194,7 @@ All errors return JSON with an \`error\` field and optional \`code\`:
             acceptedAssets: true,
             supportTransactions: {
               where: { status: "SUCCESS" },
-              select: { amount: true, supporterAddress: true },
+              select: { amount: true, assetCode: true, supporterAddress: true },
             },
           },
         });
@@ -1202,15 +1202,16 @@ All errors return JSON with an \`error\` field and optional \`code\`:
         let sorted = profiles;
         if (sort === "most_supported") {
           sorted = profiles.sort((a: any, b: any) => {
-            const aTotal = a.supportTransactions.reduce(
-              (sum: number, tx: any) => sum + Number(tx.amount),
-              0,
-            );
-            const bTotal = b.supportTransactions.reduce(
-              (sum: number, tx: any) => sum + Number(tx.amount),
-              0,
-            );
-            return bTotal - aTotal;
+            // #1254: summing amounts across different asset codes (XLM, USDC,
+            // AQUA, …) produces a meaningless cross-currency figure — the same
+            // class of bug fixed in the weekly digest service (#656).
+            // Rank by XLM volume only; profiles with no XLM transactions rank
+            // below those that have any.
+            const xlmTotal = (txs: any[]) =>
+              txs
+                .filter((tx: any) => tx.assetCode === "XLM")
+                .reduce((sum: number, tx: any) => sum + Number(tx.amount), 0);
+            return xlmTotal(b.supportTransactions) - xlmTotal(a.supportTransactions);
           });
         } else if (sort === "most_transactions") {
           sorted = profiles.sort(
