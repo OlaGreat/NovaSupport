@@ -83,9 +83,9 @@ function truncateMemoToStellarLimit(input: string): string {
   while (bytes.length > 0) {
     const decoded = decoder.decode(bytes);
     // Check if the decoded string contains the replacement character (U+FFFD)
-    // that wasn't in the original input — if so, we've cut in the middle of
-    // a multibyte sequence and must back off further.
-    if (decoded.includes("�") && !input.includes("�")) {
+    // that indicates we've cut in the middle of a multibyte sequence.
+    // If so, we must back off further to ensure a clean truncation boundary.
+    if (decoded.includes("�")) {
       bytes = bytes.slice(0, bytes.length - 1);
       continue;
     }
@@ -480,7 +480,7 @@ export function SupportPanel({
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2}
-                  d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 12-2h2a2 2 0 12 2m0 0h2a2 2 0 12 2v3m2 4H10m0 0l3-3m-3 3l3 3"
+                  d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 12-2h2a2 2 0 12 2m0 0[...]"
                 />
               </svg>
             )}
