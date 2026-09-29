@@ -33,7 +33,7 @@ type Badge = {
   awardedAt: string;
 };
 
-// ── Date range presets ────────────────────────────────────────────────────────
+// ── Date range presets ───────────────────────────────────────────────────────��[...]
 type DatePreset = "all" | "7d" | "30d" | "custom";
 
 function getPresetRange(preset: DatePreset): { from: Date | null; to: Date | null } {
@@ -190,7 +190,13 @@ export function ProfileTabs({ username }: { username: string }) {
     const { from, to } = preset === "custom"
       ? {
           from: customFrom ? new Date(customFrom) : null,
-          to: customTo ? new Date(customTo + "T23:59:59.999Z") : null,
+          // Use the viewer's local timezone when deriving the end-of-day for the
+          // custom "To" date so we include the entire selected local calendar day
+          // instead of a fixed UTC instant which would cut off viewers behind UTC.
+          to: customTo ? (() => {
+            const [y, m, d] = customTo.split("-").map(Number);
+            return new Date(y, (m || 1) - 1, d || 1, 23, 59, 59, 999);
+          })() : null,
         }
       : getPresetRange(preset);
 
@@ -257,7 +263,7 @@ export function ProfileTabs({ username }: { username: string }) {
                   value={search}
                   onChange={e => handleSearchChange(e.target.value)}
                   placeholder="Search by message…"
-                  className="w-full rounded-xl border border-white/10 bg-white/5 pl-9 pr-9 py-2 text-sm text-white placeholder:text-steel focus:border-mint/40 focus:outline-none focus:ring-1 focus:ring-mint/30 transition"
+                  className="w-full rounded-xl border border-white/10 bg-white/5 pl-9 pr-9 py-2 text-sm text-white placeholder:text-steel focus:border-mint/40 focus:outline-none focus:ring-1 focu[...]"
                 />
                 {search && (
                   <button
