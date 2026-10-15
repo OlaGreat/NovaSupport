@@ -16,6 +16,9 @@ concurrency:
   group: contract-deploy-${{ github.ref }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   test:
     name: Run contract tests
