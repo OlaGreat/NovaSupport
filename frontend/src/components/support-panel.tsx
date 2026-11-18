@@ -164,7 +164,7 @@ export function SupportPanel({
     [handleCopy],
   );
 
-  const isXlmPayment = paymentAsset.code === "XLM";
+  const isXlmPayment = paymentAsset.code === "XLM" && !paymentAsset.issuer;
 
   const handleSend = useCallback(async () => {
     const parsedAmt = parseFloat(amount);
@@ -326,13 +326,21 @@ export function SupportPanel({
   }, [visitorAddress]);
 
   useEffect(() => {
+    function handleWalletConnect(event: Event) {
+      const customEvent = event as CustomEvent<{ address: string }>;
+      setVisitorAddress(customEvent.detail?.address || null);
+    }
+
     function handleWalletDisconnect() {
       setVisitorAddress(null);
     }
 
+    window.addEventListener("wallet-connected", handleWalletConnect);
     window.addEventListener("wallet-disconnected", handleWalletDisconnect);
-    return () =>
+    return () => {
+      window.removeEventListener("wallet-connected", handleWalletConnect);
       window.removeEventListener("wallet-disconnected", handleWalletDisconnect);
+    };
   }, []);
 
   useEffect(() => {
@@ -350,6 +358,39 @@ export function SupportPanel({
     }
     fetchBalances();
   }, [visitorAddress]);
+
+  useEffect(() => {
+    if (!visitorAddress || !amount || paymentAsset.code === "XLM" || !visitorBalancesLoaded) {
+      setEstimatedReceived(null);
+      setNoPathFound(false);
+      return;
+    }
+
+    const fetchPathEstimate = async () => {
+      try {
+        const sourceAsset = paymentAsset.issuer
+          ? new StellarAsset(paymentAsset.code, paymentAsset.issuer)
+          : StellarAsset.native();
+        const paths = await withStellarRetry(() =>
+          horizonServer.strictSendPaths(sourceAsset, amount, [StellarAsset.native()]).call(),
+        );
+
+        if (paths.records.length === 0) {
+          setEstimatedReceived(null);
+          setNoPathFound(true);
+        } else {
+          setEstimatedReceived(paths.records[0].destination_amount);
+          setNoPathFound(false);
+        }
+      } catch {
+        setEstimatedReceived(null);
+        setNoPathFound(true);
+      }
+    };
+
+    const timeoutId = setTimeout(fetchPathEstimate, 500);
+    return () => clearTimeout(timeoutId);
+  }, [visitorAddress, amount, paymentAsset.code, paymentAsset.issuer, visitorBalancesLoaded])
 
   // Only offer assets the creator has declared as accepted (#1128). When the
   // creator has not configured any, fall back to the full wallet.
