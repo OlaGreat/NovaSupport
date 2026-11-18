@@ -100,6 +100,7 @@ export default function DashboardPage() {
   const [expandedDeliveries, setExpandedDeliveries] = useState<string | null>(null);
   const [deliveries, setDeliveries] = useState<Record<string, WebhookDelivery[]>>({});
   const [deliveriesLoading, setDeliveriesLoading] = useState<string | null>(null);
+  const [deliveriesError, setDeliveriesError] = useState<Record<string, string>>({});
   const [csvLoading, setCsvLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [embedCopied, setEmbedCopied] = useState(false);
@@ -415,9 +416,12 @@ export default function DashboardPage() {
       if (res.ok) {
         const data = await res.json();
         setDeliveries((prev) => ({ ...prev, [webhookId]: data.deliveries || [] }));
+        setDeliveriesError((prev) => { const next = { ...prev }; delete next[webhookId]; return next; });
+      } else {
+        setDeliveriesError((prev) => ({ ...prev, [webhookId]: "Failed to load deliveries." }));
       }
     } catch {
-      // silently fail
+      setDeliveriesError((prev) => ({ ...prev, [webhookId]: "Failed to load deliveries." }));
     } finally {
       setDeliveriesLoading(null);
     }
@@ -1020,6 +1024,8 @@ export default function DashboardPage() {
                       >
                         {deliveriesLoading === webhook.id ? (
                           <p className="text-xs text-steel">Loading deliveries...</p>
+                        ) : deliveriesError[webhook.id] ? (
+                          <p className="text-xs text-red-400">{deliveriesError[webhook.id]}</p>
                         ) : deliveries[webhook.id]?.length > 0 ? (
                           deliveries[webhook.id].map((delivery) => (
                             <div

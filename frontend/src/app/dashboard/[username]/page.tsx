@@ -190,7 +190,7 @@ function normalizeAnalyticsResponse(json: unknown): AnalyticsData {
         type: txType,
         user: supporter,
         asset: toString(item.asset ?? item.assetCode ?? item.asset_code, "XLM"),
-        amount: amountValue.toString(),
+        amount: amountValue.toFixed(7).replace(/\.?0+$/, "") || "0",
         age: timeAgo(createdAt),
       };
     }),
