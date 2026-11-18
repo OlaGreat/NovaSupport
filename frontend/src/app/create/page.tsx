@@ -198,6 +198,11 @@ export default function CreatePage() {
       return;
     }
 
+    if (twitterInvalid || githubInvalid || !websiteValid || !emailValid) {
+      setError("Please fix the errors in your social links.");
+      return;
+    }
+
     if (!walletValidation.isValid) {
       showToast(walletValidation.error || "Please enter a valid Stellar address.", "error");
       setError(walletValidation.error || "Wallet address must be a valid Stellar public key starting with G.");
@@ -211,18 +216,13 @@ export default function CreatePage() {
       return;
     }
 
-    if (form.email && !emailValid) {
-      setError("Please enter a valid email address.");
-      return;
-    }
-
     setLoading(true);
     try {
       const acceptedAssets = assets
         .filter((a) => a.code.trim() !== "")
         .map((a) => ({ code: a.code.trim(), issuer: a.issuer.trim() || undefined }));
 
-      const payload = { ...form, acceptedAssets };
+      const payload = { ...form, displayName: form.displayName.trim(), acceptedAssets };
 
       const res = await fetch(`${API_BASE_URL}/profiles`, {
         method: "POST",

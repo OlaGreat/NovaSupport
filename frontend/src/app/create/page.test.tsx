@@ -225,6 +225,39 @@ describe("CreatePage — Step 3 submission", () => {
     expect(body.displayName).toBe(VALID_STEP1.displayName);
   });
 
+  it("trims the display name before submitting", async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ username: VALID_STEP1.username }), { status: 201 })
+    );
+    vi.stubGlobal("fetch", mockFetch);
+
+    const user = await goToStep3();
+    await user.click(screen.getByRole("button", { name: /back/i }));
+    await user.click(screen.getByRole("button", { name: /back/i }));
+    const displayNameInput = screen.getByPlaceholderText(/Star Voyager/i);
+    await user.clear(displayNameInput);
+    await user.type(displayNameInput, "  Alice Dev  ");
+    await user.click(screen.getByRole("button", { name: /continue/i }));
+    await user.click(screen.getByRole("button", { name: /continue/i }));
+    await user.click(screen.getByRole("button", { name: /create profile/i }));
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalled());
+    const [, options] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(options.body as string).displayName).toBe("Alice Dev");
+  });
+
+  it("does not submit invalid social links from the final step", async () => {
+    const mockFetch = vi.fn();
+    vi.stubGlobal("fetch", mockFetch);
+
+    const user = await goToStep3();
+    await user.type(screen.getByPlaceholderText("handle"), "invalid handle");
+    await user.click(screen.getByRole("button", { name: /create profile/i }));
+
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(screen.getByText(/please fix the errors in your social links/i)).toBeInTheDocument();
+  });
+
   it("shows rate-limit countdown message on RATE_LIMIT_EXCEEDED response", async () => {
     vi.stubGlobal(
       "fetch",

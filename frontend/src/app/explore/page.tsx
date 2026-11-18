@@ -116,14 +116,15 @@ export default function ExplorePage() {
       }
 
       const data = await response.json();
+      const fetchedProfiles = Array.isArray(data.profiles) ? data.profiles : [];
 
       if (reset) {
-        setProfiles(data.profiles);
+        setProfiles(fetchedProfiles);
       } else {
-        setProfiles((prev) => [...prev, ...data.profiles]);
+        setProfiles((prev) => [...prev, ...fetchedProfiles]);
       }
 
-      setHasMore(data.profiles.length === limit);
+      setHasMore(fetchedProfiles.length === limit);
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
       setError(err instanceof Error ? err.message : "Failed to load profiles");
@@ -205,7 +206,7 @@ export default function ExplorePage() {
               >
                 <option value="">All Issuers</option>
                 {filteredIssuers.map((issuer) => (
-                  <option key={issuer.issuer} value={issuer.issuer}>
+                  <option key={`${issuer.code}:${issuer.issuer}`} value={issuer.issuer}>
                     {issuer.code} — {issuer.issuer.slice(0, 4)}…{issuer.issuer.slice(-4)}
                   </option>
                 ))}
