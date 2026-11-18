@@ -173,44 +173,51 @@ export class EventIndexer {
           profileByAddress.get(event.recipientAddress) ?? "__orphan__";
 
         // Use the contract event's tx hash as the natural idempotency key.
-        // SupportTransaction.txHash has a unique index so a duplicate insert
-        // (e.g. from re-processing the same range during recovery) is a no-op.
-        const result = await tx.supportTransaction.upsert({
-          where: { txHash: event.txHash },
-          update: {
-            status: "SUCCESS",
-            assetCode: event.assetCode,
-            assetIssuer: event.assetIssuer,
-            recipientAddress: event.recipientAddress,
-            supporterAddress: event.supporterAddress,
-            profileId,
-            updatedAt: new Date(),
-          },
-          create: {
-            txHash: event.txHash,
-            amount: event.amount,
-            assetCode: event.assetCode,
-            assetIssuer: event.assetIssuer,
-            supporterAddress: event.supporterAddress,
-            recipientAddress: event.recipientAddress,
-            stellarNetwork: this.network,
-            message: event.message,
-            profileId,
-            status: "SUCCESS",
-            // Use the on-chain event timestamp so that backfilled transactions
-            // are stamped with when they actually occurred, not when the indexer
-            // ingested them. Without this, historical backfills corrupt
-            // date-range queries, the weekly digest, and tax-year CSV exports.
-            createdAt: event.emittedAt,
-          },
+        // SupportTransaction.txHash has a unique index, so `createMany` with
+        // `skipDuplicates` (INSERT ... ON CONFLICT DO NOTHING) tells us exactly
+        // whether the row was inserted. This is the database's own signal, so it
+        // stays correct even when a duplicate lands in the same millisecond as
+        // the original insert (unlike comparing createdAt/updatedAt timestamps).
+        const { count: inserted } = await tx.supportTransaction.createMany({
+          data: [
+            {
+              txHash: event.txHash,
+              amount: event.amount,
+              assetCode: event.assetCode,
+              assetIssuer: event.assetIssuer,
+              supporterAddress: event.supporterAddress,
+              recipientAddress: event.recipientAddress,
+              stellarNetwork: this.network,
+              message: event.message,
+              profileId,
+              status: "SUCCESS",
+              // Use the on-chain event timestamp so that backfilled transactions
+              // are stamped with when they actually occurred, not when the indexer
+              // ingested them. Without this, historical backfills corrupt
+              // date-range queries, the weekly digest, and tax-year CSV exports.
+              createdAt: event.emittedAt,
+            },
+          ],
+          skipDuplicates: true,
         });
-        // Heuristic: assume createdAt == updatedAt means this was an INSERT.
-        // On fast systems (ms-resolution timestamps), a duplicate event can land
-        // in the same millisecond as the insert, miscounting as an update.
-        // TODO: Use Postgres INSERT ... ON CONFLICT DO UPDATE RETURNING xmax,
-        // where xmax = 0 means INSERT and non-zero means UPDATE, for exact detection.
-        if (result.createdAt.getTime() === result.updatedAt.getTime()) {
+
+        if (inserted > 0) {
           ingested += 1;
+        } else {
+          // Already stored (e.g. re-processing a range during recovery):
+          // refresh the mutable fields but do not count it as ingested.
+          await tx.supportTransaction.update({
+            where: { txHash: event.txHash },
+            data: {
+              status: "SUCCESS",
+              assetCode: event.assetCode,
+              assetIssuer: event.assetIssuer,
+              recipientAddress: event.recipientAddress,
+              supporterAddress: event.supporterAddress,
+              profileId,
+              updatedAt: new Date(),
+            },
+          });
         }
       }
 

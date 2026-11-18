@@ -102,28 +102,28 @@ function buildPrismaMock(): {
     findMany: async () => [],
     count: async () => 0,
     updateMany: async () => ({ count: 0 }),
-    upsert: async (args: { where: { txHash: string }; create: any; update: any }) => {
-      upsertCalls.push({
-        txHash: args.where.txHash,
-        profileId: args.create.profileId ?? args.update.profileId,
-        amount: args.create.amount,
-        assetCode: args.create.assetCode,
-        recipientAddress: args.create.recipientAddress,
-        supporterAddress: args.create.supporterAddress,
-      });
-      const existing = insertedHashes.includes(args.where.txHash);
-      if (existing) {
-        updatedHashes.push(args.where.txHash);
-        // Distinct timestamps so the "createdAt === updatedAt" heuristic
-        // counts this as an update, not a fresh insert.
-        return {
-          createdAt: new Date(2024, 0, 1),
-          updatedAt: new Date(2024, 0, 2),
-        };
+    // Mirrors Prisma's createMany({ skipDuplicates: true }): INSERT ... ON CONFLICT
+    // DO NOTHING, reporting how many rows were actually inserted.
+    createMany: async (args: { data: any[]; skipDuplicates?: boolean }) => {
+      let count = 0;
+      for (const row of args.data) {
+        upsertCalls.push({
+          txHash: row.txHash,
+          profileId: row.profileId,
+          amount: row.amount,
+          assetCode: row.assetCode,
+          recipientAddress: row.recipientAddress,
+          supporterAddress: row.supporterAddress,
+        });
+        if (insertedHashes.includes(row.txHash)) continue;
+        insertedHashes.push(row.txHash);
+        count += 1;
       }
-      insertedHashes.push(args.where.txHash);
-      const ts = new Date();
-      return { createdAt: ts, updatedAt: ts };
+      return { count };
+    },
+    update: async (args: { where: { txHash: string }; data: any }) => {
+      updatedHashes.push(args.where.txHash);
+      return { txHash: args.where.txHash };
     },
   };
 
@@ -233,6 +233,50 @@ await test("EventIndexer.pollOnce treats duplicate tx hashes as no-ops (idempote
   // Only tx-2 was new; tx-1 went down the update branch.
   assert.equal(ingested, 1);
   assert.deepEqual(mock.updatedHashes, ["tx-1"]);
+});
+
+await test("EventIndexer.pollOnce counts a new row as ingested even when createdAt differs from updatedAt", async () => {
+  const mock = buildPrismaMock();
+  const indexer = new EventIndexer({
+    prisma: mock.prisma,
+    rpcClient: rpc([
+      {
+        // Backfilled event: on-chain timestamp is long before ingestion time.
+        events: [event({ txHash: "tx-old", emittedAt: new Date("2020-01-01T00:00:00Z") })],
+        nextPagingToken: "100-1",
+      },
+    ]),
+    network: "TESTNET",
+    contractId: "C123",
+  });
+
+  const { ingested } = await indexer.pollOnce();
+  assert.equal(ingested, 1);
+  assert.deepEqual(mock.updatedHashes, []);
+});
+
+await test("EventIndexer.pollOnce counts a duplicate in the same page once, regardless of timing", async () => {
+  const mock = buildPrismaMock();
+  const sameMoment = new Date();
+  const indexer = new EventIndexer({
+    prisma: mock.prisma,
+    rpcClient: rpc([
+      {
+        events: [
+          event({ txHash: "tx-dup", pagingToken: "100-1", emittedAt: sameMoment }),
+          event({ txHash: "tx-dup", pagingToken: "100-2", emittedAt: sameMoment }),
+        ],
+        nextPagingToken: "100-2",
+      },
+    ]),
+    network: "TESTNET",
+    contractId: "C123",
+  });
+
+  const { ingested } = await indexer.pollOnce();
+  assert.equal(ingested, 1);
+  assert.deepEqual(mock.insertedHashes, ["tx-dup"]);
+  assert.deepEqual(mock.updatedHashes, ["tx-dup"]);
 });
 
 await test("EventIndexer.pollOnce on empty page advances cursor only when RPC reports one", async () => {
