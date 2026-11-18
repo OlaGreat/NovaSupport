@@ -15,6 +15,11 @@ import {
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
+// true when a string has a high surrogate with no low one after it, or a low one with no high one before it
+function hasLoneSurrogate(text: string): boolean {
+  return /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(text);
+}
+
 function makeGitHubProfile(overrides: Partial<GitHubProfileData> = {}): GitHubProfileData {
   return {
     login: "octocat",
@@ -239,5 +244,26 @@ describe("mapGitHubToNovaSupport", () => {
     const gh = makeGitHubProfile({ bio: longBio });
     const result = mapGitHubToNovaSupport(gh);
     assert.equal(result.bio.length, 280);
+  });
+
+  it("does not cut an emoji in half when it straddles the 280 limit", () => {
+    // 279 letters, then emoji: a UTF-16 slice at 280 would keep only the first half of the first emoji
+    const gh = makeGitHubProfile({ bio: "x".repeat(279) + "\u{1F600}\u{1F600}" });
+    const result = mapGitHubToNovaSupport(gh);
+    assert.equal(result.bio, "x".repeat(279) + "\u{1F600}");
+    assert.ok(!hasLoneSurrogate(result.bio), "the bio has no unpaired surrogate");
+  });
+
+  it("counts a bio of emoji in characters, not UTF-16 units", () => {
+    const gh = makeGitHubProfile({ bio: "\u{1F600}".repeat(300) });
+    const result = mapGitHubToNovaSupport(gh);
+    assert.equal(Array.from(result.bio).length, 280);
+    assert.ok(!hasLoneSurrogate(result.bio));
+  });
+
+  it("keeps a bio of exactly 280 characters, emoji included, unchanged", () => {
+    const bio = "x".repeat(278) + "\u{1F600}\u{1F600}";
+    const gh = makeGitHubProfile({ bio });
+    assert.equal(mapGitHubToNovaSupport(gh).bio, bio);
   });
 });
