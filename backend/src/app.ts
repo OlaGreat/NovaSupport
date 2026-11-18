@@ -2303,6 +2303,7 @@ All errors return JSON with an \`error\` field and optional \`code\`:
         if (ghData.avatarUrl) {
           ghData.avatarUrl = sanitizeString("avatarUrl", ghData.avatarUrl).result || null;
         }
+        ghData.githubHandle = sanitizeString("githubHandle", ghData.githubHandle).result;
 
         const updated = await prisma.profile.update({
           where: { username },
