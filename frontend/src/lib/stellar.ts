@@ -6,7 +6,7 @@ import {
   Networks,
   Operation,
   StrKey,
-  TransactionBuilder
+  TransactionBuilder,
 } from "@stellar/stellar-sdk";
 
 import { HORIZON_URL, STELLAR_NETWORK, NETWORK_PASSPHRASE } from "./config";
@@ -20,14 +20,18 @@ export {
   WalletError,
   mapWalletError,
 } from "./wallet-adapters";
-export type { WalletAdapter, WalletId, WalletErrorCode, SignTransactionOptions } from "./wallet-adapters";
+export type {
+  WalletAdapter,
+  WalletId,
+  WalletErrorCode,
+  SignTransactionOptions,
+} from "./wallet-adapters";
 
 export const stellarConfig = {
   horizonUrl: HORIZON_URL,
   stellarNetwork: STELLAR_NETWORK,
-  networkPassphrase: getDefaultNetworkPassphrase()
+  networkPassphrase: getDefaultNetworkPassphrase(),
 };
-
 
 // #1327: the SDK throws on http:// URLs unless allowHttp is set, which would
 // crash at module load when pointing at a local quickstart Horizon instance.
@@ -52,11 +56,17 @@ export function validateWalletAddress(rawAddress: string): ValidationResult {
   }
 
   if (address.length < 56) {
-    return { isValid: false, error: "Wallet address must contain 56 characters." };
+    return {
+      isValid: false,
+      error: "Wallet address must contain 56 characters.",
+    };
   }
 
   if (address.length > 56) {
-    return { isValid: false, error: "Wallet address must contain exactly 56 characters." };
+    return {
+      isValid: false,
+      error: "Wallet address must contain exactly 56 characters.",
+    };
   }
 
   if (!address.startsWith("G")) {
@@ -260,7 +270,10 @@ export function getNetworkLabel(): string {
   return stellarConfig.stellarNetwork === "PUBLIC" ? "Mainnet" : "Testnet";
 }
 
-export function stellarExpertUrl(type: "tx" | "account" | "contract", id: string): string {
+export function stellarExpertUrl(
+  type: "tx" | "account" | "contract",
+  id: string,
+): string {
   const net = stellarConfig.stellarNetwork === "PUBLIC" ? "public" : "testnet";
   return `https://stellar.expert/explorer/${net}/${type}/${id}`;
 }
@@ -286,7 +299,7 @@ export async function buildSupportIntent({
   memo,
   assetCode,
   assetIssuer,
-  sequence
+  sequence,
 }: SupportIntentInput) {
   // Prefer Soroban contract invocation when a contract ID is configured.
   if (CONTRACT_ID) {
@@ -306,14 +319,17 @@ export async function buildSupportIntent({
       // If contract client/build fails, fall back to a native payment transaction.
       // Keep the error local and continue with the payment flow.
       // eslint-disable-next-line no-console
-      console.warn("contract build failed, falling back to payment intent:", err);
+      console.warn(
+        "contract build failed, falling back to payment intent:",
+        err,
+      );
     }
   }
   const account = sequence
     ? {
         accountId: () => sourceAccount,
         sequenceNumber: () => sequence,
-        incrementSequenceNumber: () => undefined
+        incrementSequenceNumber: () => undefined,
       }
     : await withStellarRetry(() => horizonServer.loadAccount(sourceAccount));
 
@@ -324,14 +340,14 @@ export async function buildSupportIntent({
 
   const transaction = new TransactionBuilder(account, {
     fee: BASE_FEE,
-    networkPassphrase: stellarConfig.networkPassphrase
+    networkPassphrase: stellarConfig.networkPassphrase,
   })
     .addOperation(
       Operation.payment({
         destination,
         asset,
-        amount
-      })
+        amount,
+      }),
     )
     .setTimeout(30);
 
@@ -359,14 +375,18 @@ export async function buildPathPaymentIntent({
   destAsset,
   destAddress,
   slippageTolerance = 0.02,
-  memo
+  memo,
 }: PathPaymentIntentInput) {
   const paths = await withStellarRetry(() =>
-    horizonServer.strictSendPaths(sourceAsset, sourceAmount, [destAsset]).call(),
+    horizonServer
+      .strictSendPaths(sourceAsset, sourceAmount, [destAsset])
+      .call(),
   );
 
   if (paths.records.length === 0) {
-    throw new Error(`No DEX path found from ${sourceAsset.getCode()} to ${destAsset.getCode()}`);
+    throw new Error(
+      `No DEX path found from ${sourceAsset.getCode()} to ${destAsset.getCode()}`,
+    );
   }
 
   const bestPath = paths.records[0];
@@ -382,7 +402,7 @@ export async function buildPathPaymentIntent({
 
   const transaction = new TransactionBuilder(account, {
     fee: BASE_FEE,
-    networkPassphrase: stellarConfig.networkPassphrase
+    networkPassphrase: stellarConfig.networkPassphrase,
   })
     .addOperation(
       Operation.pathPaymentStrictSend({
@@ -391,10 +411,12 @@ export async function buildPathPaymentIntent({
         destination: destAddress,
         destAsset: destAsset,
         destMin: destMin,
-        path: bestPath.path.map((p: any) => 
-          p.asset_type === 'native' ? Asset.native() : new Asset(p.asset_code, p.asset_issuer)
-        )
-      })
+        path: bestPath.path.map((p: any) =>
+          p.asset_type === "native"
+            ? Asset.native()
+            : new Asset(p.asset_code, p.asset_issuer),
+        ),
+      }),
     )
     .setTimeout(30);
 
@@ -423,14 +445,18 @@ export function calculateDestinationMinimum(
   }
 
   const amountScale = 10n ** BigInt(amountFraction.length);
-  const amountNumerator = BigInt(amountInteger) * amountScale +
-    BigInt(amountFraction || "0");
-  const slippageText = slippageTolerance.toString();
+  const amountNumerator =
+    BigInt(amountInteger) * amountScale + BigInt(amountFraction || "0");
+  // Convert slippage to a fixed-decimal string before splitting so that
+  // very small values (e.g. 0.0000001) don't arrive as exponential notation
+  // ("1e-7"), which would cause BigInt() to throw a SyntaxError.
+  // toFixed(20) gives enough decimal places for any value in [0, 1).
+  const slippageText =
+    slippageTolerance.toFixed(20).replace(/\.?0+$/, "") || "0";
   const [slippageInteger, slippageFraction = ""] = slippageText.split(".");
   const slippageScale = 10n ** BigInt(slippageFraction.length);
   const slippageNumerator =
-    BigInt(slippageInteger) * slippageScale +
-    BigInt(slippageFraction || "0");
+    BigInt(slippageInteger) * slippageScale + BigInt(slippageFraction || "0");
   const numerator =
     amountNumerator * (slippageScale - slippageNumerator) * 10n ** 7n;
   const denominator = amountScale * slippageScale;
