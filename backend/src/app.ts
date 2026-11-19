@@ -1746,7 +1746,7 @@ All errors return JSON with an \`error\` field and optional \`code\`:
       .array(
         z
           .object({
-            code: z.string().min(1).max(12),
+            code: z.string().regex(/^[A-Z]{1,12}$/),
             issuer: stellarAddress.optional(),
           })
           .refine(
@@ -2656,7 +2656,7 @@ All errors return JSON with an \`error\` field and optional \`code\`:
     amount: z.string()
       .regex(/^\d+(\.\d{1,7})?$/, "amount must be a positive decimal with up to 7 decimal places")
       .refine(v => parseFloat(v) > 0, "amount must be greater than zero"),
-    assetCode: z.string().min(1).max(12),
+    assetCode: z.string().regex(/^[A-Z]{1,12}$/),
     assetIssuer: stellarAddress.optional().nullable(),
     // No client-supplied status: the stored status is set server-side from the
     // Horizon verification result (#1339), so any `status` in the body is ignored
