@@ -39,20 +39,21 @@ export async function processDueRecurringSupports(prismaClient = prisma, now = n
     if (dueSupports.length === 0) break;
 
     for (const support of dueSupports) {
-    // #608: supporterId is NULL when the supporter's account was deleted (SET NULL FK).
-    // Mark the subscription cancelled so it stops appearing as due and so
-    // the profile owner can see the cancellation in their dashboard.
-    if (!support.supporter) {
-      await prismaClient.recurringSupport.update({
-        where: { id: support.id },
-        data: { status: "cancelled", cancelledAt: new Date() },
-      });
-      logger.info({ dripId: support.id, profileId: support.profileId }, "Recurring support cancelled: supporter account deleted");
-      continue;
-    }
-
     try {
-      const supporter = support.supporter;
+      // #608: supporterId is NULL when the supporter's account was deleted (SET NULL FK).
+      // Mark the subscription cancelled so it stops appearing as due and so
+      // the profile owner can see the cancellation in their dashboard. The
+      // write is inside the per-item try so one failure cannot abort the
+      // rest of the batch (#1498).
+      if (!support.supporter) {
+        await prismaClient.recurringSupport.update({
+          where: { id: support.id },
+          data: { status: "cancelled", cancelledAt: new Date() },
+        });
+        logger.info({ dripId: support.id, profileId: support.profileId }, "Recurring support cancelled: supporter account deleted");
+        continue;
+      }
+
       // Calculate nextRunAt based on frequency, advancing from now if stale
       let nextRunAt =
         support.frequency === "weekly"
