@@ -379,6 +379,12 @@ const paginationSchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 });
 
+// GET /analytics/:username pages its recentTransactions list (#1497). The
+// default stays at the 10 the endpoint has always returned.
+const analyticsRecentTransactionsSchema = paginationSchema.extend({
+  limit: z.coerce.number().int().min(1).max(100).default(10),
+});
+
 const profileSearchPaginationSchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).default(10),
 });
@@ -3898,15 +3904,15 @@ All errors return JSON with an \`error\` field and optional \`code\`:
    *           type: integer
    *           minimum: 1
    *           maximum: 100
-   *           default: 20
-   *         description: "Number of recent transactions to return (Min: 1, Max: 100)"
+   *           default: 10
+   *         description: "Number of recentTransactions to return (Min: 1, Max: 100). Ignored by the CSV export."
    *       - in: query
    *         name: offset
    *         schema:
    *           type: integer
    *           minimum: 0
    *           default: 0
-   *         description: "Number of recent transactions to skip (Min: 0)"
+   *         description: "Number of recentTransactions to skip (Min: 0). Ignored by the CSV export."
    *       - in: query
    *         name: format
    *         schema:
@@ -3936,10 +3942,11 @@ All errors return JSON with an \`error\` field and optional \`code\`:
    *         description: Analytics not found
    */
   v1Router.get("/analytics/:username", requireAuth, exportLimiter, async (req, res) => {
-    const pagination = paginationSchema.safeParse(req.query);
+    const pagination = analyticsRecentTransactionsSchema.safeParse(req.query);
     if (!pagination.success) {
       return sendError(res, 400, "Invalid pagination parameters", "INVALID_PAGINATION");
     }
+    const { limit, offset } = pagination.data;
     const { username } = req.params;
     const format = getQueryString(req.query.format);
     const startDate = getQueryString(req.query.startDate) ?? getQueryString(req.query.from);
@@ -4009,8 +4016,9 @@ All errors return JSON with an \`error\` field and optional \`code\`:
         getAnalytics(profile.id, start, end, "json"),
         prisma.supportTransaction.findMany({
           where: { profileId: profile.id, status: "SUCCESS" },
-          orderBy: { createdAt: "desc" },
-          take: 10,
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: limit,
+          skip: offset,
           select: {
             id: true,
             txHash: true,
@@ -4028,6 +4036,7 @@ All errors return JSON with an \`error\` field and optional \`code\`:
         profile: { username: profile.username, displayName: profile.displayName },
         ...analytics,
         recentTransactions,
+        recentTransactionsPagination: { limit, offset },
       });
     } catch (err) {
       req.log.error({ err }, "failed to fetch analytics");
