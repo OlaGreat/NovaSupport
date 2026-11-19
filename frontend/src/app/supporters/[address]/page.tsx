@@ -137,10 +137,7 @@ function formatAmount(amount: string): string {
 export default async function SupporterPage({ params }: PageProps) {
   const { address } = params;
 
-  if (
-    !StrKey.isValidEd25519PublicKey(address) &&
-    !StrKey.isValidMed25519PublicKey(address)
-  ) {
+  if (!StrKey.isValidEd25519PublicKey(address)) {
     return (
       <AppShell>
         <div className="mx-auto max-w-4xl">
