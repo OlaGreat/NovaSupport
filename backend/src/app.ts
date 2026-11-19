@@ -3545,7 +3545,11 @@ All errors return JSON with an \`error\` field and optional \`code\`:
 
       let supportRecord;
       try {
-        supportRecord = await prisma.$transaction(async (tx: any) => {
+        // Issue #1483: Use Serializable isolation to prevent concurrent
+        // milestone "reached" transitions and duplicate emails, matching
+        // the pattern used by sibling creation endpoints.
+        supportRecord = await prisma.$transaction(
+          async (tx: any) => {
           // Only reached when verification === true, so the payment is confirmed on-chain
           const record = await tx.supportTransaction.create({
             data: { ...parsed.data, status: "SUCCESS" },
@@ -3616,7 +3620,9 @@ All errors return JSON with an \`error\` field and optional \`code\`:
           }
 
           return record;
-        });
+        },
+        { isolationLevel: "Serializable" },
+      );
         void invalidateProfileLeaderboardCache(supportRecord.profileId);
       } catch (error: any) {
         if (error?.code === "P2002") {
@@ -3649,6 +3655,11 @@ All errors return JSON with an \`error\` field and optional \`code\`:
             code: "DUPLICATE_TX",
             existingTxHash,
           });
+        }
+        // Issue #1483: Handle serialization conflicts from Serializable isolation
+        if (error?.code === "P2034") {
+          req.log.warn({ err: error, txHash: parsed.data.txHash }, "retryable support-transaction serialization conflict");
+          return sendError(res, 409, "Transaction conflicted; please retry", "RETRYABLE_WRITE_CONFLICT");
         }
         // Handle other database errors gracefully instead of crashing the process
         req.log.error({ err: error, txHash: parsed.data.txHash }, "Database error recording support transaction");
@@ -4973,6 +4984,10 @@ All errors return JSON with an \`error\` field and optional \`code\`:
 
     const { profileId } = req.query as { profileId?: string };
 
+    // Issue #1482: Allow opting into seeing cancelled subscriptions
+    const includeCancelled = req.query.includeCancelled === "true";
+    const statusFilter = includeCancelled ? {} : { status: { not: "cancelled" } };
+
     if (profileId) {
       // Creator view — return drips for this profile if caller owns it
       const profile = await prisma.profile.findUnique({ where: { id: profileId } });
@@ -4980,7 +4995,7 @@ All errors return JSON with an \`error\` field and optional \`code\`:
       if (!isProfileOwner(req.auth, profile)) return sendError(res, 403, "Forbidden");
 
       const subscriptions = await prisma.recurringSupport.findMany({
-        where: { profileId, status: { not: "cancelled" } },
+        where: { profileId, ...statusFilter },
         include: { supporter: { select: { email: true } } },
         orderBy: { createdAt: "desc" },
         take: limit,
@@ -5003,7 +5018,7 @@ All errors return JSON with an \`error\` field and optional \`code\`:
 
     // Supporter view — return the authenticated user's own drip subscriptions
     const subscriptions = await prisma.recurringSupport.findMany({
-      where: { supporterId: user.id, status: { not: "cancelled" } },
+      where: { supporterId: user.id, ...statusFilter },
       include: { profile: { select: { username: true, displayName: true, avatarUrl: true } } },
       orderBy: { createdAt: "desc" },
       take: limit,
@@ -5093,6 +5108,18 @@ All errors return JSON with an \`error\` field and optional \`code\`:
       }
     }
 
+    // Issue #1480: Recompute nextRunAt when resuming from paused to active,
+    // even if frequency isn't changing. Without this, a subscription paused
+    // long enough for nextRunAt to be past-due gets charged immediately on
+    // resume instead of waiting a full period.
+    if (status === "active" && subscription.status === "paused" && !nextRunAt) {
+      if (subscription.frequency === "weekly") {
+        nextRunAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      } else {
+        nextRunAt = addMonths(new Date(), 1);
+      }
+    }
+
     // #1330: When status transitions to "cancelled" via PATCH, set cancelledAt
     // to match the DELETE endpoint's behaviour and keep records consistent.
     const isCancellingNow = status === "cancelled" && subscription.status !== "cancelled";
@@ -5145,6 +5172,13 @@ All errors return JSON with an \`error\` field and optional \`code\`:
     const subscription = await prisma.recurringSupport.findUnique({ where: { id: id as string } });
     if (!subscription) return sendError(res, 404, "Recurring support not found");
     if (subscription.supporterId !== user.id) return sendError(res, 403, "Forbidden");
+
+    // Issue #1481: Idempotency guard — don't overwrite the original
+    // cancellation timestamp on duplicate DELETE calls. This matches the
+    // guard already present in the PATCH endpoint.
+    if (subscription.status === "cancelled") {
+      return res.status(200).json({ ok: true });
+    }
 
     await prisma.recurringSupport.update({
       where: { id: id as string },
