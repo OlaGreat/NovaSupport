@@ -1,6 +1,6 @@
 import { test, mock, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { deliverWebhook } from "./webhook.js";
+import { deliverWebhook, shouldRetry, getNextRetryDelay, BACKOFF_SCHEDULE } from "./webhook.js";
 
 const PAYLOAD = { event: "support.created", amount: "10" };
 
@@ -91,4 +91,12 @@ test("deliverWebhook flags server errors for retry", async () => {
   if (result.status === "failed") {
     assert.equal(result.willRetry, true);
   }
+});
+test("every backoff tier is used before retries stop (#1502)", () => {
+  let retries = 0;
+  for (let attempt = 1; shouldRetry(attempt); attempt++) {
+    assert.notEqual(getNextRetryDelay(attempt - 1), null);
+    retries++;
+  }
+  assert.equal(retries, BACKOFF_SCHEDULE.length);
 });

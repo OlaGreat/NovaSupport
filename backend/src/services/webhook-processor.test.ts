@@ -24,8 +24,13 @@ function buildPrismaMock(overrides: {
   claimCount?: number;
 } = {}) {
   const findMany = mock.fn(() => Promise.resolve(overrides.deliveries ?? [makeDelivery()]));
-  const updateMany = mock.fn(() => Promise.resolve({ count: overrides.claimCount ?? 1 }));
-  const update = mock.fn(() => Promise.resolve({}));
+  // Final status writes are guarded updateMany calls; record them in `update`.
+  const update = mock.fn((_args: unknown) => Promise.resolve({ count: 1 }));
+  const updateMany = mock.fn((args: { where: { status?: string } }) =>
+    args.where.status === "pending"
+      ? Promise.resolve({ count: overrides.claimCount ?? 1 })
+      : update(args),
+  );
 
   return {
     prismaClient: {
@@ -133,6 +138,30 @@ test("reaching max attempts sets status to failed", async () => {
   // nextAttempt = 3, shouldRetry(3) is expected to be false at the max attempt.
   assert.equal(data.status, "failed");
   assert.equal(data.attemptCount, 3);
+});
+
+test("a concurrency of 0 is clamped instead of looping forever (#1500)", async () => {
+  const { prismaClient, update } = buildPrismaMock({
+    deliveries: [makeDelivery({ id: "d1" }), makeDelivery({ id: "d2" })],
+  });
+  const deliver = mock.fn(() => Promise.resolve({ status: "success", statusCode: 200 }));
+
+  await processPendingWebhookDeliveries(prismaClient as any, deliver as any, 0);
+
+  assert.equal(deliver.mock.calls.length, 2);
+  assert.equal(update.mock.calls.length, 2);
+});
+
+test("the final status write is guarded on this worker's claim (#1501)", async () => {
+  const { prismaClient, updateMany } = buildPrismaMock();
+  const deliver = mock.fn(() => Promise.resolve({ status: "success", statusCode: 200 }));
+
+  await processPendingWebhookDeliveries(prismaClient as any, deliver as any);
+
+  const claim = updateMany.mock.calls[0]!.arguments[0] as any;
+  const final = updateMany.mock.calls[1]!.arguments[0] as any;
+  assert.equal(final.where.status, "processing");
+  assert.equal(final.where.updatedAt, claim.data.updatedAt);
 });
 
 test("a network timeout is treated as a transient failure and scheduled for retry", async () => {

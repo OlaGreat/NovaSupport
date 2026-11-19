@@ -101,11 +101,15 @@ async function processDelivery(
   prismaClient: typeof prisma,
   deliver: typeof deliverWebhook,
 ) {
+  // The claim timestamp identifies this attempt: a reclaim and re-claim by
+  // another worker bumps updatedAt, so a late final write from here no-ops.
+  const claimedAt = new Date();
   const claimed = await prismaClient.webhookDelivery.updateMany({
     where: { id: delivery.id, status: "pending" },
-    data: { status: "processing" },
+    data: { status: "processing", updatedAt: claimedAt },
   });
   if (claimed.count === 0) return;
+  const ownClaim = { id: delivery.id, status: "processing", updatedAt: claimedAt };
 
   const payload = delivery.payload as Record<string, unknown>;
   const result = await deliver(
@@ -115,8 +119,8 @@ async function processDelivery(
   );
 
   if (result.status === "success") {
-    await prismaClient.webhookDelivery.update({
-      where: { id: delivery.id },
+    await prismaClient.webhookDelivery.updateMany({
+      where: ownClaim,
       data: {
         status: "success",
         attemptCount: delivery.attemptCount + 1,
@@ -144,8 +148,8 @@ async function processDelivery(
       }
     }
 
-    await prismaClient.webhookDelivery.update({
-      where: { id: delivery.id },
+    await prismaClient.webhookDelivery.updateMany({
+      where: ownClaim,
       data: {
         status: willRetry ? "pending" : "failed",
         attemptCount: nextAttempt,
@@ -194,9 +198,12 @@ export async function processPendingWebhookDeliveries(
 
   // Process deliveries with bounded concurrency to prevent head-of-line blocking
   // Issue #1357: One slow endpoint shouldn't delay the entire batch
+  // A zero, negative or NaN concurrency would never advance the loop below and
+  // freeze the event loop, so clamp it to at least 1.
+  const step = Math.max(1, Math.floor(concurrency) || 1);
   const chunks: (typeof pendingDeliveries)[] = [];
-  for (let i = 0; i < pendingDeliveries.length; i += concurrency) {
-    chunks.push(pendingDeliveries.slice(i, i + concurrency));
+  for (let i = 0; i < pendingDeliveries.length; i += step) {
+    chunks.push(pendingDeliveries.slice(i, i + step));
   }
 
   for (const chunk of chunks) {
