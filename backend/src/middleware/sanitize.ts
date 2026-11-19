@@ -51,6 +51,8 @@ const SAFE_HTML: sanitizeHtml.IOptions = {
 const HTML_CONTENT_FIELDS = new Set([
   "bio",
   "message",
+  "memo",
+  "details",
   "description",
   "displayName",
   "title",
