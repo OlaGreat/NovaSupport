@@ -30,7 +30,10 @@ export function middleware() {
 }
 
 export const config = {
-  // Excludes /embed/*, which keeps its own permissive frame-ancestors CSP
-  // set in next.config.mjs, plus static assets.
-  matcher: "/((?!embed|_next/static|_next/image|favicon.ico).*)",
+  // Excludes /embed/* (path-segment boundary) which keeps its own permissive
+  // frame-ancestors CSP set in next.config.mjs, plus static assets.
+  // The boundary "embed(/|$)" ensures only the exact /embed route and its
+  // children are excluded, not any future route that merely starts with
+  // the same letters.
+  matcher: "/((?!embed(/|$)|_next/static|_next/image|favicon.ico).*)",
 };

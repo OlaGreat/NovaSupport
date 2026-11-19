@@ -31,12 +31,15 @@ const nextConfig = {
   async headers() {
     return [
       {
-        // Deny framing on all non-embed routes to mitigate clickjacking
+        // Deny framing on all non-embed routes to mitigate clickjacking.
+        // The pattern uses a path-segment boundary "embed(/|$)" so only
+        // /embed and its children are excluded — not any future route that
+        // merely starts with the same letters.
         // Content-Security-Policy is set in middleware.ts instead of here:
         // process.env is only resolved at build time in next.config.mjs,
         // which bakes in an empty connect-src on hosts where these vars
         // are injected at runtime rather than build time.
-        source: "/((?!embed).*)",
+        source: "/((?!embed(/|$)).*)",
         headers: [{ key: "X-Frame-Options", value: "DENY" }],
       },
       {

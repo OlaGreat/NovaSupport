@@ -54,7 +54,10 @@ export default function RecurringPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionTarget, setActionTarget] = useState<ActionTarget | null>(null);
   const [processing, setProcessing] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [toast, setToast] = useState<{
+    message: string;
+    type: "success" | "error";
+  } | null>(null);
 
   useEffect(() => {
     async function loadRecurringSupport() {
@@ -75,7 +78,8 @@ export default function RecurringPage() {
         }
 
         const res = await apiFetch(`${API_BASE_URL}/v1/recurring-support`);
-        if (!res.ok) throw new Error("Failed to load recurring support subscriptions");
+        if (!res.ok)
+          throw new Error("Failed to load recurring support subscriptions");
         const data = await res.json();
         setSubscriptions(data);
       } catch (err: unknown) {
@@ -100,7 +104,8 @@ export default function RecurringPage() {
       setToast({ message: "Subscription cancelled", type: "success" });
     } catch (err: unknown) {
       setToast({
-        message: err instanceof Error ? err.message : "Failed to cancel subscription",
+        message:
+          err instanceof Error ? err.message : "Failed to cancel subscription",
         type: "error",
       });
     } finally {
@@ -117,12 +122,16 @@ export default function RecurringPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
-      if (!res.ok) throw new Error(`Failed to ${status === "paused" ? "pause" : "resume"} subscription`);
+      if (!res.ok)
+        throw new Error(
+          `Failed to ${status === "paused" ? "pause" : "resume"} subscription`,
+        );
       setSubscriptions((prev) =>
         prev.map((s) => (s.id === id ? { ...s, status } : s)),
       );
       setToast({
-        message: status === "paused" ? "Subscription paused" : "Subscription resumed",
+        message:
+          status === "paused" ? "Subscription paused" : "Subscription resumed",
         type: "success",
       });
     } catch (err: unknown) {
@@ -137,9 +146,15 @@ export default function RecurringPage() {
   }
 
   // Split into active, paused and cancelled groups for clear visual separation
-  const activeSubscriptions = subscriptions.filter((s) => s.status === "active");
-  const pausedSubscriptions = subscriptions.filter((s) => s.status === "paused");
-  const cancelledSubscriptions = subscriptions.filter((s) => s.status === "cancelled");
+  const activeSubscriptions = subscriptions.filter(
+    (s) => s.status === "active",
+  );
+  const pausedSubscriptions = subscriptions.filter(
+    (s) => s.status === "paused",
+  );
+  const cancelledSubscriptions = subscriptions.filter(
+    (s) => s.status === "cancelled",
+  );
 
   function renderConfirmBar(sub: RecurringSupport) {
     if (!actionTarget || actionTarget.id !== sub.id) return null;
@@ -147,9 +162,21 @@ export default function RecurringPage() {
     const { action } = actionTarget;
 
     const labelMap = {
-      cancel: { question: "Cancel this drip?", confirm: "Yes, cancel", confirming: "Cancelling…" },
-      pause: { question: "Pause this drip?", confirm: "Yes, pause", confirming: "Pausing…" },
-      resume: { question: "Resume this drip?", confirm: "Yes, resume", confirming: "Resuming…" },
+      cancel: {
+        question: "Cancel this drip?",
+        confirm: "Yes, cancel",
+        confirming: "Cancelling…",
+      },
+      pause: {
+        question: "Pause this drip?",
+        confirm: "Yes, pause",
+        confirming: "Pausing…",
+      },
+      resume: {
+        question: "Resume this drip?",
+        confirm: "Yes, resume",
+        confirming: "Resuming…",
+      },
     };
     const labels = labelMap[action];
     const isProcessing = processing === sub.id;
@@ -183,26 +210,33 @@ export default function RecurringPage() {
     if (sub.status === "cancelled") return null;
     if (actionTarget?.id === sub.id) return renderConfirmBar(sub);
 
+    // Disable buttons whenever this subscription's action is in flight,
+    // regardless of which subscription's confirm bar is currently open.
+    const isProcessing = processing === sub.id;
+
     return (
       <div className="flex items-center gap-2 flex-shrink-0">
         {sub.status === "active" ? (
           <button
             onClick={() => setActionTarget({ id: sub.id, action: "pause" })}
-            className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-white/70 hover:border-yellow-400/40 hover:text-yellow-300"
+            disabled={isProcessing}
+            className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-white/70 hover:border-yellow-400/40 hover:text-yellow-300 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Pause
           </button>
         ) : (
           <button
             onClick={() => setActionTarget({ id: sub.id, action: "resume" })}
-            className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-white/70 hover:border-emerald-400/40 hover:text-emerald-300"
+            disabled={isProcessing}
+            className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-white/70 hover:border-emerald-400/40 hover:text-emerald-300 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Resume
           </button>
         )}
         <button
           onClick={() => setActionTarget({ id: sub.id, action: "cancel" })}
-          className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-white/70 hover:border-red-400/40 hover:text-red-300"
+          disabled={isProcessing}
+          className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-white/70 hover:border-red-400/40 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Cancel
         </button>
@@ -256,7 +290,9 @@ export default function RecurringPage() {
   return (
     <AppShell>
       <div className="mx-auto max-w-3xl px-4 py-10">
-        <h1 className="text-2xl font-semibold text-white mb-1">Recurring support</h1>
+        <h1 className="text-2xl font-semibold text-white mb-1">
+          Recurring support
+        </h1>
         <p className="text-sm text-white/50 mb-8">
           Manage the creators you support on a recurring basis.
         </p>
@@ -309,7 +345,13 @@ export default function RecurringPage() {
         )}
       </div>
 
-      {toast && <Toast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onDismiss={() => setToast(null)}
+        />
+      )}
     </AppShell>
   );
 }
