@@ -35,6 +35,7 @@ import {
   setCachedLeaderboard,
   type LeaderboardSort,
 } from "./services/profile-leaderboard-cache.js";
+import { clearAnalyticsCache } from "./analytics.js";
 import { processPendingWebhookDeliveries } from "./services/webhook-processor.js";
 import { getIsRedisAvailable } from "./services/redis.js";
 import { enqueueWebhookDelivery } from "./services/webhook-queue.js";
@@ -1666,12 +1667,14 @@ All errors return JSON with an \`error\` field and optional \`code\`:
       const profileId = profile.id;
       const where = { profileId, status: "SUCCESS" };
 
-      const [uniqueSupportersList, assetGroups, aggregates] = await Promise.all([
-        prisma.supportTransaction.findMany({
-          where: { ...where, supporterAddress: { not: null } },
-          distinct: ["supporterAddress"],
-          select: { supporterAddress: true },
-        }),
+      const [uniqueSupportersCount, assetGroups, aggregates] = await Promise.all([
+        prisma.$queryRaw<{ count: number }[]>`
+          SELECT COUNT(DISTINCT "supporterAddress")::int AS count
+          FROM "SupportTransaction"
+          WHERE "profileId" = ${profileId}
+            AND "status" = 'SUCCESS'
+            AND "supporterAddress" IS NOT NULL
+        `,
         prisma.supportTransaction.groupBy({
           by: ["assetCode", "assetIssuer"],
           where,
@@ -1695,7 +1698,7 @@ All errors return JSON with an \`error\` field and optional \`code\`:
 
       res.json({
         totalTransactions,
-        uniqueSupporters: uniqueSupportersList.length,
+        uniqueSupporters: uniqueSupportersCount[0]?.count ?? 0,
         assetTotals,
         firstSupportedAt: aggregates._min.createdAt ? aggregates._min.createdAt.toISOString() : null,
         lastSupportedAt: aggregates._max.createdAt ? aggregates._max.createdAt.toISOString() : null,
@@ -3625,6 +3628,7 @@ All errors return JSON with an \`error\` field and optional \`code\`:
         { isolationLevel: "Serializable" },
       );
         void invalidateProfileLeaderboardCache(supportRecord.profileId);
+        clearAnalyticsCache(supportRecord.profileId);
       } catch (error: any) {
         if (error?.code === "P2002") {
           // Inspect meta.target to determine which unique constraint was
