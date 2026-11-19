@@ -87,6 +87,7 @@ let purgeInterval: ReturnType<typeof setInterval> | null = null;
 let revokedTokenPurgeInterval: ReturnType<typeof setInterval> | null = null;
 
 export function startIpRetentionPurgeScheduler() {
+  if (purgeInterval) return;
   logger.info("IP retention purge scheduler starting...");
 
   maybeRunPurge().catch((err) => {
@@ -101,6 +102,7 @@ export function startIpRetentionPurgeScheduler() {
 }
 
 export function startRevokedTokenPurgeScheduler() {
+  if (revokedTokenPurgeInterval) return;
   logger.info("Revoked token purge scheduler starting...");
 
   maybeRunRevokedTokenPurge().catch((err) => {
