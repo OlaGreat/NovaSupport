@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback, KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback, KeyboardEvent } from "react";
 import { useToast } from "@/lib/use-toast";
 import {
   Asset as StellarAsset,
@@ -121,6 +121,10 @@ export function SupportPanel({
   const [balance, setBalance] = useState<string | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [balanceError, setBalanceError] = useState<string | null>(null);
+  // Monotonic id of the latest balance request. A response whose id no longer
+  // matches belongs to a superseded request (e.g. an earlier wallet address)
+  // and must not overwrite the displayed balance (#1448).
+  const balanceRequestIdRef = useRef(0);
   const [accountNotFound, setAccountNotFound] = useState(false);
   const [copied, setCopied] = useState(false);
   const [paymentAsset, setPaymentAsset] = useState<{
@@ -294,17 +298,21 @@ export function SupportPanel({
 
   const loadBalance = async (address: string) => {
     if (!address) return;
+    const requestId = ++balanceRequestIdRef.current;
+    const isStale = () => requestId !== balanceRequestIdRef.current;
     setBalanceLoading(true);
     setBalanceError(null);
     setAccountNotFound(false);
 
     try {
       const account = await horizonServer.loadAccount(address);
+      if (isStale()) return;
       const xlmBalance = account.balances.find(
         (b: any) => b.asset_type === "native",
       );
       setBalance(xlmBalance ? xlmBalance.balance : "0");
     } catch (err: any) {
+      if (isStale()) return;
       if (err?.response?.status === 404 || err?.status === 404) {
         setAccountNotFound(true);
         setBalance("0");
@@ -315,14 +323,20 @@ export function SupportPanel({
         setBalanceError("Failed to load balance");
       }
     } finally {
-      setBalanceLoading(false);
+      if (!isStale()) setBalanceLoading(false);
     }
   };
 
   useEffect(() => {
-    if (visitorAddress) {
-      loadBalance(visitorAddress);
+    if (!visitorAddress) {
+      // Wallet disconnected: invalidate any in-flight request so a late
+      // response for the old account is discarded (#1448).
+      balanceRequestIdRef.current++;
+      setBalanceLoading(false);
+      return;
     }
+    // loadBalance bumps the request id, superseding any earlier address.
+    loadBalance(visitorAddress);
   }, [visitorAddress]);
 
   useEffect(() => {
@@ -346,17 +360,23 @@ export function SupportPanel({
   useEffect(() => {
     if (!visitorAddress) return;
     const address = visitorAddress;
+    let cancelled = false;
     async function fetchBalances() {
       try {
         const account = await horizonServer.loadAccount(address);
+        if (cancelled) return;
         setVisitorBalances(account.balances as any[]);
       } catch {
+        if (cancelled) return;
         setVisitorBalances([]);
       } finally {
-        setVisitorBalancesLoaded(true);
+        if (!cancelled) setVisitorBalancesLoaded(true);
       }
     }
     fetchBalances();
+    return () => {
+      cancelled = true;
+    };
   }, [visitorAddress]);
 
   useEffect(() => {
