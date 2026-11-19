@@ -107,7 +107,8 @@ export async function fetchGitHubProfile(
 
 export function mapGitHubToNovaSupport(gh: GitHubProfileData): ImportedProfileData {
   const displayName = gh.name?.trim() || gh.login;
-  const bio = (gh.bio ?? "").trim().slice(0, 280);
+  // Truncate by code point so an emoji at the boundary is not split into an unpaired surrogate.
+  const bio = Array.from((gh.bio ?? "").trim()).slice(0, 280).join("");
 
   let websiteUrl: string | null = null;
   const blog = gh.blog?.trim();
