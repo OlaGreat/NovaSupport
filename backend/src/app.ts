@@ -1750,7 +1750,24 @@ All errors return JSON with an \`error\` field and optional \`code\`:
             { message: "issuer is required for non-XLM assets" },
           ),
       )
-      .min(1),
+      .min(1)
+      .max(50)
+      // Same rules as the assets-update endpoint: a duplicate (code, issuer) pair is a validation error here, not
+      // a database uniqueness failure that the catch block would misreport as "Username already taken" (#1475).
+      .superRefine((assets, ctx) => {
+        const seen = new Set<string>();
+        assets.forEach((asset, index) => {
+          const key = `${asset.code}:${asset.issuer ?? ""}`;
+          if (seen.has(key)) {
+            ctx.addIssue({
+              code: "custom",
+              path: [index],
+              message: `Duplicate asset: ${asset.code}${asset.issuer ? ` (issuer ${asset.issuer})` : ""}`,
+            });
+          }
+          seen.add(key);
+        });
+      }),
   });
 
   /**
@@ -3453,6 +3470,8 @@ All errors return JSON with an \`error\` field and optional \`code\`:
         recipientAddress: parsed.data.recipientAddress,
         assetCode: parsed.data.assetCode,
         assetIssuer: parsed.data.assetIssuer,
+        // The on-chain payer must be the supporter the request claims (#1473).
+        supporterAddress: parsed.data.supporterAddress ?? null,
       };
 
       // Verify the profile exists and that recipientAddress matches its wallet
@@ -3506,7 +3525,9 @@ All errors return JSON with an \`error\` field and optional \`code\`:
           where: { id: parsed.data.recurringSupportExecutionId },
           include: { recurringSupport: { include: { profile: true } } },
         });
-        if (!execution) {
+        // Only the subscriber may complete their own execution (#1474). Non-owners get the same 404 as a
+        // missing execution, so IDs cannot be probed.
+        if (!execution || execution.recurringSupport.supporterId !== req.auth?.userId) {
           return sendError(res, 404, "Recurring support execution not found");
         }
         if (execution.status !== "pending") {
