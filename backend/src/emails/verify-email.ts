@@ -1,7 +1,7 @@
 import { sendEmail } from "../mailer.js";
 import { escapeHtml } from "../services/email.js";
 
-const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
+const APP_URL = (process.env.APP_URL ?? "http://localhost:3000").replace(/\/+$/, "");
 
 export async function sendVerificationEmail(
   to: string,
