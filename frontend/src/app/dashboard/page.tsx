@@ -369,7 +369,13 @@ export default function DashboardPage() {
         body: JSON.stringify({ url: webhookUrl }),
       });
 
-      if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to add webhook"));
+      if (!res.ok) {
+        if (res.status === 429) {
+          setToast({ message: formatRateLimitedMessage(parseRateLimitInfo(res.headers)), type: "error" });
+          return;
+        }
+        throw new Error(await readErrorMessage(res, "Failed to add webhook"));
+      }
 
       const newWebhook = await res.json();
       setWebhooks([newWebhook, ...webhooks]);
@@ -392,7 +398,13 @@ export default function DashboardPage() {
         { method: "DELETE" }
       );
 
-      if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to delete webhook"));
+      if (!res.ok) {
+        if (res.status === 429) {
+          setToast({ message: formatRateLimitedMessage(parseRateLimitInfo(res.headers)), type: "error" });
+          return;
+        }
+        throw new Error(await readErrorMessage(res, "Failed to delete webhook"));
+      }
 
       setWebhooks(webhooks.filter((w) => w.id !== webhookId));
       setWebhookDeleteConfirm(null);
