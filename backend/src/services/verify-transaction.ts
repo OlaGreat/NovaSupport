@@ -6,6 +6,11 @@ export interface ExpectedTxDetails {
   recipientAddress: string;
   assetCode: string;
   assetIssuer?: string | null;
+  /**
+   * The supporter the request claims to be. When set, the on-chain payer (`from`, or `funder` for account creation)
+   * must be this address, so a real payment made by someone else cannot be credited to the claimant (#1473).
+   */
+  supporterAddress?: string | null;
 }
 
 // Module-level cache shared across all calls in the same process
@@ -37,7 +42,13 @@ function setCacheEntry(key: string, value: { result: boolean; timestamp: number 
 
 function makeCacheKey(txHash: string, expected?: ExpectedTxDetails): string {
   if (!expected) return txHash;
-  return `${txHash}|${expected.recipientAddress}|${expected.amount}|${expected.assetCode}|${expected.assetIssuer ?? ""}`;
+  return `${txHash}|${expected.recipientAddress}|${expected.amount}|${expected.assetCode}|${expected.assetIssuer ?? ""}|${expected.supporterAddress ?? ""}`;
+}
+
+/** True when no payer was claimed, or the operation's payer is the claimed supporter. */
+function payerMatches(payer: string | undefined, expected: ExpectedTxDetails): boolean {
+  if (!expected.supporterAddress) return true;
+  return payer === expected.supporterAddress;
 }
 
 function isAssetMatch(
@@ -69,6 +80,7 @@ async function validatePaymentDetails(
     for (const op of ops.records) {
       if (op.type === "payment") {
         const p = op as unknown as {
+          from?: string;
           to: string;
           amount: string;
           asset_type: string;
@@ -77,6 +89,7 @@ async function validatePaymentDetails(
         };
         if (
           p.to === expected.recipientAddress &&
+          payerMatches(p.from, expected) &&
           normalizeAmount(p.amount) === normalizeAmount(expected.amount) &&
           isAssetMatch(p, expected.assetCode, expected.assetIssuer)
         ) {
@@ -85,11 +98,12 @@ async function validatePaymentDetails(
       }
 
       if (op.type === "create_account") {
-        const c = op as unknown as { account: string; starting_balance: string };
+        const c = op as unknown as { account: string; funder?: string; starting_balance: string };
         const wantNative = expected.assetCode === "XLM" || expected.assetCode === "native";
         if (
           wantNative &&
           c.account === expected.recipientAddress &&
+          payerMatches(c.funder, expected) &&
           normalizeAmount(c.starting_balance) === normalizeAmount(expected.amount)
         ) {
           return true;
@@ -101,6 +115,7 @@ async function validatePaymentDetails(
         op.type === "path_payment_strict_receive"
       ) {
         const p = op as unknown as {
+          from?: string;
           to: string;
           destination_amount?: string;
           amount?: string;
@@ -115,6 +130,7 @@ async function validatePaymentDetails(
 
         if (
           p.to === expected.recipientAddress &&
+          payerMatches(p.from, expected) &&
           receivedAmount !== undefined &&
           normalizeAmount(receivedAmount) === normalizeAmount(expected.amount) &&
           isAssetMatch(p, expected.assetCode, expected.assetIssuer)
