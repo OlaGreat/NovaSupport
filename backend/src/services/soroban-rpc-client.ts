@@ -95,6 +95,18 @@ function decodeSupportEvent(event: RpcEvent): SupportEventRecord | null {
     return null;
   }
 
+  const timestamp = toNumber(nativeObj.timestamp);
+  if (timestamp <= 0) {
+    logger.warn({
+      msg: "Malformed support event payload discarded (missing or invalid timestamp)",
+      ledger: event.ledger,
+      contractId: event.contractId,
+      txHash: event.txHash,
+      native: nativeObj
+    });
+    return null;
+  }
+
   return {
     txHash: event.txHash,
     ledger: event.ledger,
@@ -110,8 +122,37 @@ function decodeSupportEvent(event: RpcEvent): SupportEventRecord | null {
     recipientAddress: asAddress(recipient),
     supporterAddress: asAddress(supporter),
     message: nativeObj.message == null ? null : String(nativeObj.message),
-    emittedAt: new Date(toNumber(nativeObj.timestamp) * 1000),
+    emittedAt: new Date(timestamp * 1000),
   };
+}
+
+/**
+ * POST to the RPC with exponential backoff on transient failures (network
+ * errors, timeouts, 429 and 5xx), mirroring verify-transaction's retry pattern.
+ */
+async function postWithRetry(
+  rpcUrl: string,
+  body: unknown,
+  retries = 3,
+  backoffMs = 1000,
+): Promise<Response> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const response = await fetch(rpcUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(15_000),
+      });
+      const transient = response.status === 429 || response.status >= 500;
+      if (!transient || attempt >= retries) return response;
+      logger.warn({ attempt, status: response.status }, "Soroban RPC request failed, retrying");
+    } catch (err) {
+      if (attempt >= retries) throw err;
+      logger.warn({ attempt, err }, "Soroban RPC request failed, retrying");
+    }
+    await new Promise((resolve) => setTimeout(resolve, backoffMs * Math.pow(2, attempt - 1)));
+  }
 }
 
 export function createSorobanRpcClient(
@@ -155,12 +196,7 @@ export function createSorobanRpcClient(
         params,
       };
 
-      const response = await fetch(rpcUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody),
-        signal: AbortSignal.timeout(15_000),
-      });
+      const response = await postWithRetry(rpcUrl, requestBody);
 
       if (!response.ok) {
         throw new Error(`Soroban RPC request failed: ${response.status}`);
@@ -184,15 +220,10 @@ export function createSorobanRpcClient(
 }
 
 async function getLatestLedger(rpcUrl: string): Promise<number> {
-  const response = await fetch(rpcUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: randomUUID(),
-      method: "getLatestLedger",
-    }),
-    signal: AbortSignal.timeout(15_000),
+  const response = await postWithRetry(rpcUrl, {
+    jsonrpc: "2.0",
+    id: randomUUID(),
+    method: "getLatestLedger",
   });
 
   if (!response.ok) {

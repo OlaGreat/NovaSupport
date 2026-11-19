@@ -195,6 +195,10 @@ export async function maybeRunBadgeSweep(
 let badgeSweepInterval: ReturnType<typeof setInterval> | null = null;
 
 export function startBadgeSweepScheduler() {
+  if (badgeSweepInterval) {
+    logger.warn("Badge sweep scheduler already running; ignoring duplicate start");
+    return;
+  }
   logger.info("Badge sweep scheduler starting...");
 
   maybeRunBadgeSweep().catch((err) => {

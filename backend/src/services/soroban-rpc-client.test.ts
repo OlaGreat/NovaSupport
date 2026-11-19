@@ -1,6 +1,7 @@
 import { test, mock, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { createSorobanRpcClient } from "./soroban-rpc-client.js";
+import { nativeToScVal } from "@stellar/stellar-sdk";
 
 function mockFetch(handler: (url: string, init: RequestInit) => unknown) {
   mock.method(globalThis, "fetch", handler as typeof fetch);
@@ -104,4 +105,47 @@ test("getLatestLedger exceeds numeric latestLedger fallback when sequence is abs
   await fetchWithNoCursor();
 
   assert.equal(getEventsBody?.params?.startLedger, 99);
+});
+
+// ── issue #1509: transient RPC failures are retried ──────────────────────────
+
+test("getLatestLedger retries a transient 503 before succeeding", async () => {
+  let ledgerCalls = 0;
+  mockFetch((_url, init) => {
+    const body = JSON.parse(init.body as string) as { method: string };
+    if (body.method === "getLatestLedger") {
+      ledgerCalls++;
+      if (ledgerCalls === 1) return { ok: false, status: 503, json: () => Promise.resolve({}) };
+      return jsonResponse({ jsonrpc: "2.0", id: "1", result: { sequence: 7 } });
+    }
+    return jsonResponse({ jsonrpc: "2.0", id: "1", result: { events: [] } });
+  });
+
+  await fetchWithNoCursor();
+
+  assert.equal(ledgerCalls, 2);
+});
+
+// ── issue #1510: missing timestamp discards the event ────────────────────────
+
+test("support event without a timestamp is discarded, not dated 1970", async () => {
+  const value = nativeToScVal({ supporter: "GSUPPORTER", recipient: "GRECIPIENT", amount: "1" }).toXDR("base64");
+  mockFetch(() =>
+    jsonResponse({
+      jsonrpc: "2.0",
+      id: "1",
+      result: {
+        latestLedger: 1,
+        events: [{ ledger: 1, txHash: "h", ledgerClosedAt: "", topic: ["t"], value, contractId: CONTRACT_ID, id: "1" }],
+      },
+    }),
+  );
+
+  const page = await createSorobanRpcClient("https://rpc.example.com").fetchEvents({
+    contractId: CONTRACT_ID,
+    cursor: "c",
+    startLedger: undefined,
+  });
+
+  assert.deepEqual(page.events, []);
 });
