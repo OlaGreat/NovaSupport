@@ -36,6 +36,8 @@ const INVALIDATION_CHANNEL = "lb:invalidate";
 const leaderboardCache = new Map<string, CachedLeaderboard>();
 
 let invalidationSubscriptionStarted = false;
+let invalidationSubscriptionPending = false;
+let invalidationListenerAttached = false;
 
 /**
  * Listen for invalidation broadcasts from other replicas so their local
@@ -43,23 +45,36 @@ let invalidationSubscriptionStarted = false;
  * subscriber is unavailable, the short fallback TTL is the backstop.
  */
 function ensureInvalidationSubscription(): void {
-  if (invalidationSubscriptionStarted) return;
+  if (invalidationSubscriptionStarted || invalidationSubscriptionPending) return;
 
   const subscriber = getRedisSubscriber();
   if (!subscriber) return;
 
   try {
-    subscriber.on("message", (channel: string, message: string) => {
-      if (channel !== INVALIDATION_CHANNEL) return;
-      const profileId = message.trim();
-      if (!profileId) return;
-      applyLeaderboardInvalidationBroadcast(profileId);
-    });
-    subscriber.subscribe(INVALIDATION_CHANNEL).catch((err: Error) => {
-      logger.warn({ err }, "Failed to subscribe to leaderboard invalidation channel");
-    });
-    invalidationSubscriptionStarted = true;
+    if (!invalidationListenerAttached) {
+      subscriber.on("message", (channel: string, message: string) => {
+        if (channel !== INVALIDATION_CHANNEL) return;
+        const profileId = message.trim();
+        if (!profileId) return;
+        applyLeaderboardInvalidationBroadcast(profileId);
+      });
+      invalidationListenerAttached = true;
+    }
+    invalidationSubscriptionPending = true;
+    subscriber
+      .subscribe(INVALIDATION_CHANNEL)
+      .then(() => {
+        invalidationSubscriptionStarted = true;
+      })
+      .catch((err: Error) => {
+        // Leave the started flag false so the next cache access retries.
+        logger.warn({ err }, "Failed to subscribe to leaderboard invalidation channel; will retry");
+      })
+      .finally(() => {
+        invalidationSubscriptionPending = false;
+      });
   } catch (err) {
+    invalidationSubscriptionPending = false;
     logger.warn({ err }, "Failed to start leaderboard invalidation subscription");
   }
 }
