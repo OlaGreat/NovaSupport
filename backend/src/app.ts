@@ -3258,10 +3258,10 @@ All errors return JSON with an \`error\` field and optional \`code\`:
         : 'ORDER BY total_amount DESC, transaction_count DESC';
 
     const rows: any[] = await prisma.$queryRawUnsafe(
-      `SELECT "supporterAddress", "assetCode", SUM(amount) as total_amount, COUNT(*) as transaction_count
+      `SELECT "supporterAddress", "assetCode", "assetIssuer", SUM(amount) as total_amount, COUNT(*) as transaction_count
        FROM "SupportTransaction"
        WHERE "profileId" = $1 AND "status" = 'SUCCESS' AND "supporterAddress" IS NOT NULL
-       GROUP BY "supporterAddress", "assetCode"
+       GROUP BY "supporterAddress", "assetCode", "assetIssuer"
        ${orderClause}
        LIMIT $2 OFFSET $3`,
       profile.id,
@@ -3274,7 +3274,7 @@ All errors return JSON with an \`error\` field and optional \`code\`:
          SELECT 1
          FROM "SupportTransaction"
          WHERE "profileId" = $1 AND "status" = 'SUCCESS' AND "supporterAddress" IS NOT NULL
-         GROUP BY "supporterAddress", "assetCode"
+         GROUP BY "supporterAddress", "assetCode", "assetIssuer"
        ) sub`,
       profile.id
     );
@@ -3285,6 +3285,7 @@ All errors return JSON with an \`error\` field and optional \`code\`:
       rank: offset + index + 1,
       supporterAddress: entry.supporterAddress as string,
       assetCode: entry.assetCode,
+      assetIssuer: entry.assetIssuer ?? null,
       totalAmount: (entry.total_amount ?? "0").toString(),
       transactionCount: Number(entry.transaction_count ?? 0),
     }));
@@ -4003,6 +4004,7 @@ All errors return JSON with an \`error\` field and optional \`code\`:
         const transactions = await prisma.supportTransaction.findMany({
           where: {
             profileId: profile.id,
+            status: "SUCCESS",
             ...(start || end
               ? { createdAt: { ...(start ? { gte: start } : {}), ...(end ? { lte: end } : {}) } }
               : {}),
@@ -4807,7 +4809,7 @@ All errors return JSON with an \`error\` field and optional \`code\`:
         }),
         // Aggregate totals per asset across ALL matching transactions (not just this page)
         prisma.supportTransaction.groupBy({
-          by: ["assetCode"],
+          by: ["assetCode", "assetIssuer"],
           where: whereClause,
           _sum: { amount: true },
         }),
@@ -4824,6 +4826,7 @@ All errors return JSON with an \`error\` field and optional \`code\`:
 
       const totalByAsset = assetAggregates.map((row: any) => ({
         assetCode: row.assetCode as string,
+        assetIssuer: row.assetIssuer ?? null,
         total: (row._sum.amount ?? 0).toFixed(7),
       }));
 
@@ -5411,15 +5414,16 @@ All errors return JSON with an \`error\` field and optional \`code\`:
     if (!profile) return sendError(res, 404, "Profile not found");
 
     const rows = await prisma.supportTransaction.groupBy({
-      by: ["assetCode"],
+      by: ["assetCode", "assetIssuer"],
       where: { profileId: profile.id, status: "SUCCESS" },
       _sum: { amount: true },
     });
 
-    // Amounts are only meaningful within their own asset code, so no cross-asset
+    // Amounts are only meaningful within their own asset (code, issuer) pair, so no cross-asset
     // total or percentage is returned (#1342)
     const breakdown = rows.map((row) => ({
       assetCode: row.assetCode,
+      assetIssuer: row.assetIssuer ?? null,
       amount: Number(Number(row._sum.amount ?? 0).toFixed(7)),
     }));
 
