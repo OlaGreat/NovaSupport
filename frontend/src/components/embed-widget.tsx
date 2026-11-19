@@ -217,10 +217,9 @@ export function EmbedCodeGenerator({ username }: EmbedCodeGeneratorProps) {
   const embedCode = `<iframe
   src="${iframeUrl}"
   width="${size === "small" ? 320 : size === "medium" ? 380 : 448}"
-  height="320"
+  height="600"
   frameborder="0"
-  scrolling="no"
-  style="border:none;border-radius:1rem;overflow:hidden;"
+  style="border:none;border-radius:1rem;"
   title="Support ${username} on NovaSupport"
 ></iframe>`;
 
@@ -298,10 +297,14 @@ export function EmbedCodeGenerator({ username }: EmbedCodeGeneratorProps) {
         </pre>
         <button
           onClick={handleCopy}
+          aria-label={copied ? "Embed code copied" : "Copy embed code"}
           className="absolute top-2 right-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-white hover:bg-white/10 transition-colors"
         >
           {copied ? "Copied!" : "Copy"}
         </button>
+        <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+          {copied ? "Embed code copied to clipboard" : ""}
+        </div>
       </div>
     </div>
   );

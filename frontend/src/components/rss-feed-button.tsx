@@ -41,7 +41,12 @@ export function RSSFeedButton({ username }: RSSFeedButtonProps) {
       </button>
 
       {showToast && (
-        <div className="absolute left-1/2 top-full z-50 mt-2 -translate-x-1/2 whitespace-nowrap rounded-lg border border-white/10 bg-[#0A0A0B] px-3 py-2 shadow-2xl sm:left-0 sm:translate-x-0">
+        <div
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          className="absolute left-1/2 top-full z-50 mt-2 -translate-x-1/2 whitespace-nowrap rounded-lg border border-white/10 bg-[#0A0A0B] px-3 py-2 shadow-2xl sm:left-0 sm:translate-x-0"
+        >
           <div className="flex items-center gap-1.5 text-xs text-mint">
             <Check size={12} />
             RSS feed URL copied
