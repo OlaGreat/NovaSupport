@@ -32,6 +32,7 @@ import {
   Info,
 } from "lucide-react";
 import { motion } from "framer-motion";
+import { formatRateLimitedMessage, parseRateLimitInfo } from "@/lib/rate-limit";
 
 interface AnalyticsData {
   summary: {
@@ -509,7 +510,13 @@ export default function DashboardPage() {
       const res = await apiFetch(
         `${API_BASE_URL}/profiles/${username}/transactions/csv`,
       );
-      if (!res.ok) throw new Error("Failed to fetch transaction CSV");
+      if (!res.ok) {
+        const rateLimitInfo = parseRateLimitInfo(res.headers);
+        if (rateLimitInfo) {
+          throw new Error(formatRateLimitedMessage(rateLimitInfo));
+        }
+        throw new Error("Failed to download CSV");
+      }
       const csv = await res.text();
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
@@ -709,6 +716,8 @@ export default function DashboardPage() {
               title="Avg. Support"
               value={`${data.summary.avgContribution.toLocaleString()} ${getDominantAssetCode(assetBreakdown)}`}
               icon={<TrendingUp className="text-gold" />}
+              trend="—"
+              positive={true}
             />
             <StatCard
               title="Active Drips"

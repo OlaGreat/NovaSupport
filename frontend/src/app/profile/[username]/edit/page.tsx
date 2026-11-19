@@ -159,7 +159,6 @@ export default function EditProfilePage() {
     }
     // #812: compare both code AND issuer so creators can accept multiple
     // issuers of the same asset code (e.g. Circle USDC vs another USDC).
-    const issuerToAdd = newAssetIssuer.trim();
     if (assets.some((a) => a.code === code && (a.issuer ?? "") === issuerToAdd)) {
       setAssetError("This exact asset (code + issuer) is already added.");
       return;
