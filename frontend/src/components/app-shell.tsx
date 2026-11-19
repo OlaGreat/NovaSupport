@@ -40,7 +40,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       }
     }
 
-    function handleEscape(event: KeyboardEvent) {
+    function handleEscape(event: globalThis.KeyboardEvent) {
       if (event.key === "Escape") {
         setShowDropdown(false);
       }
