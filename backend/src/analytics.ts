@@ -53,7 +53,7 @@ export async function getAnalytics(
           to_char("createdAt", 'YYYY-MM-DD') AS date,
           SUM("amount")::text AS total,
           COUNT(*)::int AS "txCount",
-          COUNT(DISTINCT "supporterAddress")::int AS "uniqueContributors"
+          COUNT(DISTINCT "supporterAddress" FILTER (WHERE "supporterAddress" IS NOT NULL))::int AS "uniqueContributors"
         FROM "SupportTransaction"
         WHERE "profileId" = ${profileId}
           AND "createdAt" >= ${start}
@@ -68,7 +68,7 @@ export async function getAnalytics(
         _count: true,
       }),
       prisma.$queryRaw<{ count: number }[]>`
-        SELECT COUNT(DISTINCT "supporterAddress")::int AS count
+        SELECT COUNT(DISTINCT "supporterAddress" FILTER (WHERE "supporterAddress" IS NOT NULL))::int AS count
         FROM "SupportTransaction"
         WHERE "profileId" = ${profileId}
           AND "createdAt" >= ${start}
@@ -283,7 +283,7 @@ export function fillGaps(
 
     const existing = dataMap.get(key);
     if (existing) {
-      const total = Number(existing.total);
+      const total = new Prisma.Decimal(existing.total);
       const count = Number(existing.txCount);
       const uniqueContributors = existing.uniqueContributors != null
         ? Number(existing.uniqueContributors)
@@ -291,11 +291,11 @@ export function fillGaps(
       const avgContribution = existing.avgContribution != null
         ? String(existing.avgContribution)
         : count > 0
-          ? String(total / count)
+          ? total.div(count).toString()
           : "0";
       filled.push({
         date: new Date(cursor),
-        amount: String(total),
+        amount: total.toString(),
         count,
         uniqueContributors,
         avgContribution,
