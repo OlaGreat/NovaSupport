@@ -22,8 +22,16 @@ const OPERATIONS_PAGE_SIZE = 100;
 // (txHash, expected) key, accumulated indefinitely otherwise (#923)
 export const VERIFICATION_CACHE_MAX_SIZE = 5000;
 
-function normalizeAmount(amount: string): string {
-  return parseFloat(amount).toFixed(7);
+// Non-numeric input normalizes to null so two malformed amounts never match.
+function normalizeAmount(amount: string): string | null {
+  const n = Number(amount);
+  if (typeof amount !== "string" || amount.trim() === "" || !Number.isFinite(n)) return null;
+  return n.toFixed(7);
+}
+
+function amountsMatch(a: string, b: string): boolean {
+  const normalized = normalizeAmount(a);
+  return normalized !== null && normalized === normalizeAmount(b);
 }
 
 export function clearVerificationCache(): void {
@@ -90,7 +98,7 @@ async function validatePaymentDetails(
         if (
           p.to === expected.recipientAddress &&
           payerMatches(p.from, expected) &&
-          normalizeAmount(p.amount) === normalizeAmount(expected.amount) &&
+          amountsMatch(p.amount, expected.amount) &&
           isAssetMatch(p, expected.assetCode, expected.assetIssuer)
         ) {
           return true;
@@ -104,7 +112,7 @@ async function validatePaymentDetails(
           wantNative &&
           c.account === expected.recipientAddress &&
           payerMatches(c.funder, expected) &&
-          normalizeAmount(c.starting_balance) === normalizeAmount(expected.amount)
+          amountsMatch(c.starting_balance, expected.amount)
         ) {
           return true;
         }
@@ -132,7 +140,7 @@ async function validatePaymentDetails(
           p.to === expected.recipientAddress &&
           payerMatches(p.from, expected) &&
           receivedAmount !== undefined &&
-          normalizeAmount(receivedAmount) === normalizeAmount(expected.amount) &&
+          amountsMatch(receivedAmount, expected.amount) &&
           isAssetMatch(p, expected.assetCode, expected.assetIssuer)
         ) {
           return true;

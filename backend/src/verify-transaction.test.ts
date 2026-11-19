@@ -117,6 +117,19 @@ async function suiteDetailValidation() {
     assert.strictEqual(await verifyTransaction(server, "abc", 3, 10, expected), false);
   });
 
+  await test("two malformed amounts do not match", async () => {
+    const server = makeMockServer({
+      txResult: successTx,
+      opsResult: { records: [{ ...xlmPaymentOp, amount: "garbage" }] },
+    });
+    const expected: ExpectedTxDetails = {
+      amount: "not-a-number",
+      recipientAddress: DUMMY_RECIPIENT,
+      assetCode: "XLM",
+    };
+    assert.strictEqual(await verifyTransaction(server, "abc", 3, 10, expected), false);
+  });
+
   await test("wrong recipient returns false", async () => {
     const server = makeMockServer({
       txResult: successTx,

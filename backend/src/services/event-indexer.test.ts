@@ -102,6 +102,8 @@ function buildPrismaMock(): {
     findMany: async () => [],
     count: async () => 0,
     updateMany: async () => ({ count: 0 }),
+    findUnique: async (args: { where: { txHash: string } }) =>
+      insertedHashes.includes(args.where.txHash) ? { id: args.where.txHash } : null,
     upsert: async (args: { where: { txHash: string }; create: any; update: any }) => {
       upsertCalls.push({
         txHash: args.where.txHash,
