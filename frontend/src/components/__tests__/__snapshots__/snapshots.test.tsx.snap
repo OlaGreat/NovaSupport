@@ -366,10 +366,18 @@ exports[`Component Snapshots > ProfileTabs matches snapshot 1`] = `
       class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-white/5 pb-1"
     >
       <div
+        aria-label="Profile sections"
         class="flex gap-8"
+        role="tablist"
       >
         <button
+          aria-controls="profile-tabpanel-history"
+          aria-selected="true"
           class="flex items-center gap-2 border-b-2 py-4 text-sm font-semibold transition-all border-mint text-mint"
+          id="profile-tab-history"
+          role="tab"
+          tabindex="0"
+          type="button"
         >
           <span>
             HistoryIcon
@@ -377,7 +385,13 @@ exports[`Component Snapshots > ProfileTabs matches snapshot 1`] = `
           Support History
         </button>
         <button
+          aria-controls="profile-tabpanel-badges"
+          aria-selected="false"
           class="flex items-center gap-2 border-b-2 py-4 text-sm font-semibold transition-all border-transparent text-steel hover:text-white"
+          id="profile-tab-badges"
+          role="tab"
+          tabindex="-1"
+          type="button"
         >
           <span>
             AwardIcon
@@ -396,9 +410,13 @@ exports[`Component Snapshots > ProfileTabs matches snapshot 1`] = `
     </div>
     <div
       animate="[object Object]"
+      aria-labelledby="profile-tab-history"
       class="min-h-[300px] space-y-4"
       exit="[object Object]"
+      id="profile-tabpanel-history"
       initial="[object Object]"
+      role="tabpanel"
+      tabindex="0"
     >
       <div
         class="flex flex-col sm:flex-row gap-3"

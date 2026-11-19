@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { beforeEach, describe, it, expect, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { SupportPanel } from '@/components/support-panel';
 import { signTransaction } from '@stellar/freighter-api';
 import { buildSupportIntent, horizonServer } from '@/lib/stellar';
@@ -323,5 +323,42 @@ describe('SupportPanel', () => {
     // No error panel should be shown
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.queryByText(/error/i)).not.toBeInTheDocument();
+  });
+
+  it('ignores a stale balance response for a previous visitor address (#1448)', async () => {
+    const firstAddress = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+    const secondAddress = 'GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
+    const staleResolvers: Array<(value: unknown) => void> = [];
+
+    vi.mocked(horizonServer.loadAccount).mockImplementation(((address: string) => {
+      if (address === firstAddress) {
+        // Hold the first account's requests open until after the switch.
+        return new Promise((resolve) => staleResolvers.push(resolve));
+      }
+      return Promise.resolve({
+        balances: [{ asset_type: 'native', balance: '50.0000000' }],
+      });
+    }) as never);
+
+    render(<SupportPanel {...mockProps} />);
+    await waitFor(() => expect(staleResolvers.length).toBeGreaterThan(0));
+
+    // Switch wallets while the first address's requests are still in flight.
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent('wallet-connected', { detail: { address: secondAddress } }),
+      );
+    });
+    await waitFor(() => expect(screen.getByRole('combobox')).toHaveTextContent('50.00'));
+
+    // The old account's responses now arrive late and must be discarded.
+    await act(async () => {
+      staleResolvers.forEach((resolve) =>
+        resolve({ balances: [{ asset_type: 'native', balance: '999.0000000' }] }),
+      );
+    });
+
+    expect(screen.getByRole('combobox')).toHaveTextContent('50.00');
+    expect(screen.getByRole('combobox')).not.toHaveTextContent('999.00');
   });
 });
