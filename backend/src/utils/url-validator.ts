@@ -4,6 +4,7 @@ import { resolve } from "dns";
 const resolveAsync = promisify(resolve);
 
 const PRIVATE_IP_RANGES = [
+  /^0\./, // "this network" / unspecified (0.0.0.0)
   /^127\./, // loopback
   /^10\./, // private
   /^172\.(1[6-9]|2[0-9]|3[01])\./, // private
@@ -15,6 +16,7 @@ const PRIVATE_IP_RANGES = [
   /^fe80:/, // IPv6 link-local
   /^fc00:/, // IPv6 unique local
   /^ff00:/, // IPv6 multicast
+  /^::ffff:0\./, // IPv6 "this network" mapped
   /^::ffff:127\./, // IPv6 loopback mapped
   /^::ffff:10\./, // IPv6 private mapped
   /^::ffff:172\.(1[6-9]|2[0-9]|3[01])\./, // IPv6 private mapped
@@ -45,8 +47,10 @@ export async function validateWebhookUrl(url: string): Promise<string | null> {
         }
       }
     } catch (dnsError) {
-      // DNS resolution failure is not a SSRF violation, let it through
-      // The actual delivery will fail if the hostname is invalid
+      // A DNS failure means we cannot prove the host is public, so reject the
+      // URL instead of letting it through unchecked (#1519). This matches the
+      // stricter behavior of validatePublicUrl below.
+      return "URL hostname could not be resolved safely";
     }
 
     return null;

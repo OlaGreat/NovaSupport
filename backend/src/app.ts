@@ -4740,7 +4740,9 @@ All errors return JSON with an \`error\` field and optional \`code\`:
         data: {
           profileId: profile.id,
           reason: parsed.data.reason,
-          details: parsed.data.details ?? null,
+          details: parsed.data.details
+            ? sanitizeString("details", parsed.data.details).result
+            : null,
           reporterIp,
           expiresAt,
         },
