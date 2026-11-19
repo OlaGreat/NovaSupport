@@ -55,9 +55,16 @@ export async function connectRedis(): Promise<void> {
   client = createRedisClient();
   if (!client) return;
 
+  // If the timeout wins, the abandoned connect may still reject later; log it
+  // instead of leaving an unhandled rejection that can crash the process.
+  const connecting = client.connect();
+  connecting.catch((err: unknown) => {
+    logger.warn({ err }, "Redis connect attempt failed after timeout");
+  });
+
   try {
     await Promise.race([
-      client.connect(),
+      connecting,
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("Redis connection timeout")), 5000),
       ),

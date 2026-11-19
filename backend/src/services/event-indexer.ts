@@ -175,7 +175,11 @@ export class EventIndexer {
         // Use the contract event's tx hash as the natural idempotency key.
         // SupportTransaction.txHash has a unique index so a duplicate insert
         // (e.g. from re-processing the same range during recovery) is a no-op.
-        const result = await tx.supportTransaction.upsert({
+        const existing = await tx.supportTransaction.findUnique({
+          where: { txHash: event.txHash },
+          select: { id: true },
+        });
+        await tx.supportTransaction.upsert({
           where: { txHash: event.txHash },
           update: {
             status: "SUCCESS",
@@ -204,12 +208,9 @@ export class EventIndexer {
             createdAt: event.emittedAt,
           },
         });
-        // Heuristic: assume createdAt == updatedAt means this was an INSERT.
-        // On fast systems (ms-resolution timestamps), a duplicate event can land
-        // in the same millisecond as the insert, miscounting as an update.
-        // TODO: Use Postgres INSERT ... ON CONFLICT DO UPDATE RETURNING xmax,
-        // where xmax = 0 means INSERT and non-zero means UPDATE, for exact detection.
-        if (result.createdAt.getTime() === result.updatedAt.getTime()) {
+        // Count only genuine inserts: the row did not exist before the upsert in
+        // this same transaction, so a re-indexed duplicate is never counted.
+        if (!existing) {
           ingested += 1;
         }
       }

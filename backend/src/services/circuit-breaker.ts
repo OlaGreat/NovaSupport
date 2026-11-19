@@ -58,12 +58,17 @@ export class CircuitBreaker {
               ? await this.storage.claimHalfOpen(this.nextAttempt)
               : true;
             if (!claimed) {
+              // Another replica won the claim; proceed if it has already moved
+              // the circuit to CLOSED or HALF_OPEN, otherwise stay failed-fast.
               await this.refreshFromStorage();
-              throw new Error("Circuit breaker is OPEN");
+              if (this.state === "OPEN") {
+                throw new Error("Circuit breaker is OPEN");
+              }
+            } else {
+              this.state = "HALF_OPEN";
+              Metrics.circuitBreakerState("HALF_OPEN");
+              logger.info("Circuit breaker state: HALF_OPEN");
             }
-            this.state = "HALF_OPEN";
-            Metrics.circuitBreakerState("HALF_OPEN");
-            logger.info("Circuit breaker state: HALF_OPEN");
           } else {
             throw new Error("Circuit breaker is OPEN");
           }
