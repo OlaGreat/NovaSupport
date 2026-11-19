@@ -62,7 +62,7 @@ async function main() {
       txHash: "demo-tx-hash-stellar-testnet",
       amount: "25.0000000",
       assetCode: "XLM",
-      status: "pending",
+      status: "SUCCESS",
       message: "Thanks for maintaining open-source tooling.",
       stellarNetwork: "TESTNET",
       supporterAddress: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
