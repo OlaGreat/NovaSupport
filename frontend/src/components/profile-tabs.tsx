@@ -77,6 +77,20 @@ function Highlight({ text, query }: { text: string; query: string }) {
   return <>{parts}</>;
 }
 
+type ProfileTab = "history" | "badges";
+
+const TAB_ORDER: ProfileTab[] = ["history", "badges"];
+
+const TAB_IDS: Record<ProfileTab, string> = {
+  history: "profile-tab-history",
+  badges: "profile-tab-badges",
+};
+
+const PANEL_IDS: Record<ProfileTab, string> = {
+  history: "profile-tabpanel-history",
+  badges: "profile-tabpanel-badges",
+};
+
 export function ProfileTabs({ username }: { username: string }) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"history" | "badges">("history");
@@ -115,6 +129,25 @@ export function ProfileTabs({ username }: { username: string }) {
     const newHash = tab === "badges" ? "#badges" : "#history";
     window.history.replaceState(null, "", newHash);
   }, []);
+
+  // WAI-ARIA tabs keyboard pattern (#1451): only the selected tab is in the
+  // tab order, and Arrow/Home/End keys move selection between tabs.
+  const handleTabListKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      const index = TAB_ORDER.indexOf(activeTab);
+      let nextIndex: number | null = null;
+      if (event.key === "ArrowRight") nextIndex = (index + 1) % TAB_ORDER.length;
+      else if (event.key === "ArrowLeft") nextIndex = (index - 1 + TAB_ORDER.length) % TAB_ORDER.length;
+      else if (event.key === "Home") nextIndex = 0;
+      else if (event.key === "End") nextIndex = TAB_ORDER.length - 1;
+      if (nextIndex === null) return;
+      event.preventDefault();
+      const nextTab = TAB_ORDER[nextIndex];
+      handleTabChange(nextTab);
+      document.getElementById(TAB_IDS[nextTab])?.focus();
+    },
+    [activeTab, handleTabChange],
+  );
 
   // ── Search state (#554) ────────────────────────────────────────────────────
   const [search, setSearch] = useState("");
@@ -199,10 +232,15 @@ export function ProfileTabs({ username }: { username: string }) {
 
     const { from, to } = preset === "custom"
       ? {
-          from: customFrom ? new Date(customFrom) : null,
-          // Use the viewer's local timezone when deriving the end-of-day for the
-          // custom "To" date so we include the entire selected local calendar day
-          // instead of a fixed UTC instant which would cut off viewers behind UTC.
+          // Build both boundaries from local date components. A bare
+          // "YYYY-MM-DD" string passed to `new Date()` is parsed as UTC
+          // midnight, which shifts the boundary for any viewer not at UTC
+          // (#1450). "From" is the start of the selected local day and "To"
+          // is the end of it, so the whole local calendar range is included.
+          from: customFrom ? (() => {
+            const [y, m, d] = customFrom.split("-").map(Number);
+            return new Date(y, (m || 1) - 1, d || 1, 0, 0, 0, 0);
+          })() : null,
           to: customTo ? (() => {
             const [y, m, d] = customTo.split("-").map(Number);
             return new Date(y, (m || 1) - 1, d || 1, 23, 59, 59, 999);
@@ -230,14 +268,23 @@ export function ProfileTabs({ username }: { username: string }) {
     <div className="space-y-6">
       {/* ── Tab header ───────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-white/5 pb-1">
-        <div className="flex gap-8">
+        <div
+          role="tablist"
+          aria-label="Profile sections"
+          className="flex gap-8"
+          onKeyDown={handleTabListKeyDown}
+        >
           <TabButton
+            id={TAB_IDS.history}
+            panelId={PANEL_IDS.history}
             active={activeTab === "history"}
             onClick={() => handleTabChange("history")}
             icon={<History size={16} />}
             label="Support History"
           />
           <TabButton
+            id={TAB_IDS.badges}
+            panelId={PANEL_IDS.badges}
             active={activeTab === "badges"}
             onClick={() => handleTabChange("badges")}
             icon={<Award size={16} />}
@@ -258,6 +305,10 @@ export function ProfileTabs({ username }: { username: string }) {
         {activeTab === "history" ? (
           <motion.div
             key="history"
+            id={PANEL_IDS.history}
+            role="tabpanel"
+            aria-labelledby={TAB_IDS.history}
+            tabIndex={0}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
@@ -273,7 +324,7 @@ export function ProfileTabs({ username }: { username: string }) {
                   value={search}
                   onChange={e => handleSearchChange(e.target.value)}
                   placeholder="Search by message…"
-                  className="w-full rounded-xl border border-white/10 bg-white/5 pl-9 pr-9 py-2 text-sm text-white placeholder:text-steel focus:border-mint/40 focus:outline-none focus:ring-1 focu[...]"
+                  className="w-full rounded-xl border border-white/10 bg-white/5 pl-9 pr-9 py-2 text-sm text-white placeholder:text-steel focus:border-mint/40 focus:outline-none focus:ring-1 focus:ring-mint/30 transition"
                 />
                 {search && (
                   <button
@@ -459,6 +510,10 @@ export function ProfileTabs({ username }: { username: string }) {
           /* ── Badges tab (#460) ─────────────────────────────────────────── */
           <motion.div
             key="badges"
+            id={PANEL_IDS.badges}
+            role="tabpanel"
+            aria-labelledby={TAB_IDS.badges}
+            tabIndex={0}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
@@ -499,7 +554,9 @@ export function ProfileTabs({ username }: { username: string }) {
   );
 }
 
-function TabButton({ active, onClick, icon, label }: {
+function TabButton({ id, panelId, active, onClick, icon, label }: {
+  id: string;
+  panelId: string;
   active: boolean;
   onClick: () => void;
   icon: React.ReactNode;
@@ -507,6 +564,12 @@ function TabButton({ active, onClick, icon, label }: {
 }) {
   return (
     <button
+      type="button"
+      id={id}
+      role="tab"
+      aria-selected={active}
+      aria-controls={panelId}
+      tabIndex={active ? 0 : -1}
       onClick={onClick}
       className={`flex items-center gap-2 border-b-2 py-4 text-sm font-semibold transition-all ${
         active
