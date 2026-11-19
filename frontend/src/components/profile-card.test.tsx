@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ProfileCard } from '@/components/profile-card';
 
 const showToast = vi.fn();
@@ -144,6 +144,37 @@ describe('ProfileCard', () => {
     await waitFor(() => {
       const modal = container.querySelector('[class*="fixed"][class*="inset-0"]');
       expect(modal).toBeInTheDocument();
+    });
+  });
+
+  describe('ownership re-check (#1449)', () => {
+    beforeEach(() => {
+      localStorage.clear();
+    });
+
+    it('shows the email-verification banner after the owner connects mid-session', () => {
+      render(<ProfileCard {...mockProfile} isVerified={false} />);
+      expect(screen.queryByText('Verify your email address')).not.toBeInTheDocument();
+
+      act(() => {
+        localStorage.setItem('walletAddress', mockProfile.walletAddress);
+        window.dispatchEvent(new Event('wallet-connected'));
+      });
+
+      expect(screen.getByText('Verify your email address')).toBeInTheDocument();
+    });
+
+    it('hides the email-verification banner after the owner disconnects', () => {
+      localStorage.setItem('walletAddress', mockProfile.walletAddress);
+      render(<ProfileCard {...mockProfile} isVerified={false} />);
+      expect(screen.getByText('Verify your email address')).toBeInTheDocument();
+
+      act(() => {
+        localStorage.removeItem('walletAddress');
+        window.dispatchEvent(new Event('wallet-disconnected'));
+      });
+
+      expect(screen.queryByText('Verify your email address')).not.toBeInTheDocument();
     });
   });
 });
