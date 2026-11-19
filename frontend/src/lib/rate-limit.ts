@@ -10,6 +10,19 @@ function parseNumber(value: string | null): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+// Values this large are absolute epoch timestamps (ms or s). Anything smaller
+// is delta-seconds from now, which is what the RateLimit header draft defines
+// for `ratelimit-reset`. Treating a delta such as 60 as an epoch made the
+// reset time January 1970.
+const EPOCH_MS_FLOOR = 1e12;
+const EPOCH_SECONDS_FLOOR = 1e9;
+
+function parseRateLimitReset(value: number, nowMs: number): Date {
+  if (value >= EPOCH_MS_FLOOR) return new Date(value);
+  if (value >= EPOCH_SECONDS_FLOOR) return new Date(value * 1000);
+  return new Date(nowMs + value * 1000);
+}
+
 export function parseRateLimitInfo(headers: Headers): RateLimitInfo {
   const limit = parseNumber(headers.get("ratelimit-limit"));
   const remaining = parseNumber(headers.get("ratelimit-remaining"));
@@ -27,9 +40,8 @@ export function parseRateLimitInfo(headers: Headers): RateLimitInfo {
 
   if (!resetAt) {
     const resetValue = parseNumber(headers.get("ratelimit-reset"));
-    if (typeof resetValue === "number") {
-      const ms = resetValue > 1e12 ? resetValue : resetValue * 1000;
-      resetAt = new Date(ms);
+    if (typeof resetValue === "number" && resetValue >= 0) {
+      resetAt = parseRateLimitReset(resetValue, Date.now());
     }
   }
 
