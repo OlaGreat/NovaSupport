@@ -5175,9 +5175,9 @@ All errors return JSON with an \`error\` field and optional \`code\`:
 
     // Issue #1481: Idempotency guard — don't overwrite the original
     // cancellation timestamp on duplicate DELETE calls. This matches the
-    // guard already present in the PATCH endpoint.
+    // guard already present in the PATCH endpoint (#1330).
     if (subscription.status === "cancelled") {
-      return res.status(200).json({ ok: true });
+      return res.status(200).json({ ok: true, alreadyCancelled: true });
     }
 
     await prisma.recurringSupport.update({
