@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   getAvailableWallets,
   getWalletAdapter,
+  mapWalletError,
   type WalletAdapter,
   type WalletId,
 } from "@/lib/wallet-adapters";
@@ -92,7 +93,7 @@ export function WalletConnect({ onConnect }: WalletConnectProps = {}) {
         router.replace(redirectPath);
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : `Failed to connect ${adapter.name}.`;
+      const msg = err instanceof Error ? mapWalletError(err) : `Failed to connect ${adapter.name}.`;
       setError(msg);
       setStatus("Connection failed.");
     } finally {
