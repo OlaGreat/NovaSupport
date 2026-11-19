@@ -470,7 +470,7 @@ export function createApp(customLogger?: Logger) {
   // Issue #1259: Configure trust-proxy so req.ip reflects the real client address
   // behind reverse proxies/load balancers, not the proxy's own IP.
   // This is required for all IP-based rate limiting and abuse detection to work correctly.
-  app.set("trust proxy", true);
+  app.set("trust proxy", 1);
 
   const {
     globalLimiter,
@@ -2326,6 +2326,9 @@ All errors return JSON with an \`error\` field and optional \`code\`:
         if (ghData.avatarUrl) {
           ghData.avatarUrl = sanitizeString("avatarUrl", ghData.avatarUrl).result || null;
         }
+        if (ghData.githubHandle) {
+          ghData.githubHandle = sanitizeString("githubHandle", ghData.githubHandle).result || null;
+        }
 
         const updated = await prisma.profile.update({
           where: { username },
@@ -2666,7 +2669,7 @@ All errors return JSON with an \`error\` field and optional \`code\`:
       .optional()
       .nullable(),
     stellarNetwork: z.string().default(resolveStellarNetwork()),
-    supporterAddress: z.string().optional().nullable(),
+    supporterAddress: stellarAddress.optional().nullable(),
     recipientAddress: z.string().min(1),
     profileId: z.string().min(1),
     supporterId: z.string().optional().nullable(),
@@ -2837,7 +2840,12 @@ All errors return JSON with an \`error\` field and optional \`code\`:
     const { limit, offset } = pagination.data;
     const { username } = req.params;
     const network = req.query.network as string | undefined;
-    const status = req.query.status as string | undefined;
+    const rawStatus = req.query.status as string | undefined;
+    const ALLOWED_STATUSES = ["pending", "SUCCESS", "failed"] as const;
+    if (rawStatus !== undefined && !(ALLOWED_STATUSES as readonly string[]).includes(rawStatus)) {
+      return sendError(res, 400, `Invalid status value. Must be one of: ${ALLOWED_STATUSES.join(", ")}.`, "INVALID_STATUS");
+    }
+    const status = rawStatus;
     const assetCode = req.query.assetCode as string | undefined;
     const rawQ = req.query.q as string | undefined;
     const q = rawQ?.trim().slice(0, 100) || undefined;
