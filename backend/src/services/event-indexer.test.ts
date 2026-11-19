@@ -471,6 +471,32 @@ await test("EventIndexer.resolveOrphans links orphaned transactions to matching 
   assert.deepEqual(updatedIds, [orphanId]);
 });
 
+await test("EventIndexer.resolveOrphans rotates past a full page of unresolvable orphans (#1503)", async () => {
+  const mock = buildPrismaMock();
+  const page = Array.from({ length: 100 }, (_, i) => ({
+    id: `id-${String(i).padStart(3, "0")}`,
+    recipientAddress: "GNOBODY",
+  }));
+  const queries: any[] = [];
+  mock.prisma.supportTransaction.findMany = async (args: any) => {
+    queries.push(args);
+    return queries.length === 1 ? page : [];
+  };
+  mock.prisma.profile = { findMany: async () => [] };
+
+  const indexer = new EventIndexer({
+    prisma: mock.prisma,
+    rpcClient: rpc([]),
+    network: "TESTNET",
+    contractId: "C123",
+  });
+
+  await indexer.resolveOrphans();
+  await indexer.resolveOrphans();
+  assert.deepEqual(queries[0].orderBy, { id: "asc" });
+  assert.deepEqual(queries[1].where.id, { gt: "id-099" });
+});
+
 await test("EventIndexer.resolveOrphans returns 0 when no orphans exist", async () => {
   const mock = buildPrismaMock();
   mock.prisma.supportTransaction.findMany = async () => [];

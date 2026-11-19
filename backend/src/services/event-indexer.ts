@@ -95,6 +95,8 @@ export class EventIndexer {
   private stopped = false;
   private timer: NodeJS.Timeout | null = null;
   private currentTick: Promise<void> | null = null;
+  /** Last orphan id scanned; rotates the window so old unresolvable rows can't starve newer ones (#1503). */
+  private orphanCursor: string | undefined;
   /** Pages consumed since the last time the drain loop paused. Reset once the burst ends. */
   private pagesConsumedInBurst = 0;
 
@@ -229,11 +231,19 @@ export class EventIndexer {
    * Returns the number of transactions resolved.
    */
   async resolveOrphans(): Promise<number> {
+    const pageSize = 100;
     const orphans = await this.prisma.supportTransaction.findMany({
-      where: { profileId: "__orphan__" },
+      where: {
+        profileId: "__orphan__",
+        ...(this.orphanCursor ? { id: { gt: this.orphanCursor } } : {}),
+      },
       select: { id: true, recipientAddress: true },
-      take: 100,
+      orderBy: { id: "asc" },
+      take: pageSize,
     });
+    // Advance past this page; wrap to the start once the end is reached.
+    this.orphanCursor =
+      orphans.length === pageSize ? orphans[orphans.length - 1]!.id : undefined;
 
     const trueBacklog = await this.prisma.supportTransaction.count({
       where: { profileId: "__orphan__" },

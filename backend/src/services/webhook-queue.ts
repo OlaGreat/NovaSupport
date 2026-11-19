@@ -122,10 +122,11 @@ export function createWebhookWorker(
     async (job) => {
       const { deliveryId, webhookId, url, signingKey, payload } = job.data as WebhookJobData;
 
-      // Atomically claim the row
+      // Atomically claim the row; claimedAt guards the final write (#1501)
+      const claimedAt = new Date();
       const claimed = await prisma.webhookDelivery.updateMany({
         where: { id: deliveryId, status: "pending" },
-        data: { status: "processing" },
+        data: { status: "processing", updatedAt: claimedAt },
       });
 
       if (claimed.count === 0) {
@@ -136,8 +137,8 @@ export function createWebhookWorker(
       const result = await deliverWebhook(url, signingKey, payload);
 
       if (result.status === "success") {
-        await prisma.webhookDelivery.update({
-          where: { id: deliveryId },
+        await prisma.webhookDelivery.updateMany({
+          where: { id: deliveryId, status: "processing", updatedAt: claimedAt },
           data: {
             status: "success",
             attemptCount: job.attemptsMade + 1,
@@ -161,8 +162,8 @@ export function createWebhookWorker(
           }
         }
 
-        await prisma.webhookDelivery.update({
-          where: { id: deliveryId },
+        await prisma.webhookDelivery.updateMany({
+          where: { id: deliveryId, status: "processing", updatedAt: claimedAt },
           data: {
             status: willRetry ? "pending" : "failed",
             attemptCount: nextAttempt,
