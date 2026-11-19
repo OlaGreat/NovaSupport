@@ -185,6 +185,28 @@ test("processDueRecurringSupports cancels drips whose supporter account was dele
   assert.equal(mockPrisma.recurringSupportExecution.create.mock.callCount(), 0);
 });
 
+test("processDueRecurringSupports keeps processing the batch when a supporter-deleted cancellation write fails (#1498)", async () => {
+  const mockPrisma = buildPrismaMock({
+    recurringSupports: [
+      makeSupport({ id: "drip-deleted", supporter: null }),
+      makeSupport({ id: "drip-ok" }),
+    ],
+  });
+  mockPrisma.recurringSupport.update = mock.fn(() =>
+    Promise.reject(new Error("transient database error")),
+  );
+
+  await processDueRecurringSupports(
+    mockPrisma as unknown as Parameters<typeof processDueRecurringSupports>[0],
+  );
+
+  assert.equal(mockPrisma.recurringSupport.update.mock.callCount(), 1);
+  assert.equal(mockPrisma.$transaction.mock.callCount(), 1);
+  assert.equal(mockPrisma.recurringSupportExecution.create.mock.callCount(), 1);
+  const created = getFirstArg<ExecutionCreateArg>(mockPrisma.recurringSupportExecution.create);
+  assert.equal(created.data.recurringSupportId, "drip-ok");
+});
+
 test("processDueRecurringSupports continues processing after individual failure", async () => {
   let callIndex = 0;
   const $executeRaw = mock.fn(() => {

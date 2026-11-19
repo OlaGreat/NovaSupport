@@ -1,6 +1,6 @@
 import { test, mock } from "node:test";
 import assert from "node:assert/strict";
-import { sendWeeklyDigests, maybeRunWeeklyDigest } from "./weekly-digest.js";
+import { sendWeeklyDigests, maybeRunWeeklyDigest, DIGEST_RESEND_GUARD_MS } from "./weekly-digest.js";
 import { escapeHtml } from "./email.js";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -50,6 +50,7 @@ function makePrismaMock(overrides: {
 
   return {
     profile: { findMany: profileFindMany },
+    notificationPreferences: { update: mock.fn(() => Promise.resolve({})) },
     supportTransaction: {
       findMany: mock.fn((arg?: { distinct?: string[] }) => {
         if (arg?.distinct) return uniqueSupportersFindMany(arg);
@@ -277,4 +278,86 @@ test("no claim means no send and no release", async () => {
 
   assert.equal(sendDigests.mock.calls.length, 0);
   assert.equal(updateMany.mock.calls.length, 0);
+});
+
+// ── issue #1499: a retried run must not re-send to profiles already emailed ──
+
+type DigestProfile = ReturnType<typeof makeProfile> & {
+  notificationPreferences: { weeklyDigest: boolean; lastWeeklyDigestSentAt?: Date | null };
+};
+
+/** Stateful mock: marking a profile sent persists across runs, like the DB. */
+function makeStatefulDigestMock(profiles: DigestProfile[], failSecondPageOnce: boolean) {
+  let failNext = failSecondPageOnce;
+  const base = makePrismaMock();
+  const findMany = mock.fn((args: { take: number; cursor?: { id: string } }) => {
+    const start = args.cursor ? profiles.findIndex((p) => p.id === args.cursor!.id) + 1 : 0;
+    if (start > 0 && failNext) {
+      failNext = false;
+      return Promise.reject(new Error("connection reset during batch query"));
+    }
+    return Promise.resolve(profiles.slice(start, start + args.take));
+  });
+  const update = mock.fn(
+    (args: { where: { profileId: string }; data: { lastWeeklyDigestSentAt: Date } }) => {
+      const profile = profiles.find((p) => p.id === args.where.profileId)!;
+      profile.notificationPreferences.lastWeeklyDigestSentAt = args.data.lastWeeklyDigestSentAt;
+      return Promise.resolve({});
+    },
+  );
+  return { ...base, profile: { findMany }, notificationPreferences: { update } };
+}
+
+test("a retry after a partially failed run does not re-send to profiles already emailed (#1499)", async () => {
+  const profiles: DigestProfile[] = Array.from({ length: 101 }, (_, i) =>
+    makeProfile({
+      id: `profile-${String(i).padStart(3, "0")}`,
+      email: `creator-${i}@test.com`,
+      notificationPreferences: { weeklyDigest: true, lastWeeklyDigestSentAt: null },
+    }) as DigestProfile,
+  );
+  const mockPrisma = makeStatefulDigestMock(profiles, true);
+  const sent: string[] = [];
+  const sendEmail = mock.fn(async (opts: { to: string }) => {
+    sent.push(opts.to);
+  });
+
+  // First run emails the first page of 100, then the second page query throws.
+  await assert.rejects(() => sendWeeklyDigests(mockPrisma as never, sendEmail as never));
+  assert.equal(sent.length, 100);
+
+  // The retry must only reach the profile the failed run never got to.
+  await sendWeeklyDigests(mockPrisma as never, sendEmail as never);
+  assert.equal(sent.length, 101);
+  assert.equal(new Set(sent).size, 101, "no profile may receive the digest twice");
+  assert.deepEqual(sent.slice(100), ["creator-100@test.com"]);
+});
+
+test("a profile emailed more than the resend guard ago gets next week's digest", async () => {
+  const lastWeek = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  assert.ok(Date.now() - lastWeek.getTime() > DIGEST_RESEND_GUARD_MS);
+  const profiles = [
+    makeProfile({ notificationPreferences: { weeklyDigest: true, lastWeeklyDigestSentAt: lastWeek } }) as DigestProfile,
+  ];
+  const mockPrisma = makeStatefulDigestMock(profiles, false);
+  const sendEmail = mock.fn(async () => {});
+
+  await sendWeeklyDigests(mockPrisma as never, sendEmail as never);
+
+  assert.equal(sendEmail.mock.calls.length, 1);
+  assert.ok(profiles[0]!.notificationPreferences.lastWeeklyDigestSentAt! > lastWeek);
+});
+
+test("a failure to record the send still counts the email and keeps going", async () => {
+  const profiles = [
+    makeProfile({ id: "profile-a", email: "a@test.com" }),
+    makeProfile({ id: "profile-b", email: "b@test.com" }),
+  ];
+  const mockPrisma = makePrismaMock({ profiles });
+  mockPrisma.notificationPreferences.update = mock.fn(() => Promise.reject(new Error("write failed")));
+  const sendEmail = mock.fn(async () => {});
+
+  await sendWeeklyDigests(mockPrisma as never, sendEmail as never);
+
+  assert.equal(sendEmail.mock.calls.length, 2);
 });

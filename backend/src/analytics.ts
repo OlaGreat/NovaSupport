@@ -101,14 +101,14 @@ export async function getAnalytics(
     };
   });
 
-  // Fill gaps
+  // Fill gaps. The SQL buckets rows by UTC calendar day, so the walk must step
+  // through UTC days too (#1496).
   const filledData: DailyContribution[] = [];
-  let currentDate = new Date(start);
 
   const dataMap = new Map(dailyData.map((d) => [d.date, d]));
 
-  while (currentDate <= end) {
-    const dateStr = currentDate.toISOString().split("T")[0];
+  for (const day of utcDaysInRange(start, end)) {
+    const dateStr = day.toISOString().split("T")[0];
     const existing = dataMap.get(dateStr);
 
     filledData.push(
@@ -120,8 +120,6 @@ export async function getAnalytics(
         avgContribution: "0",
       }
     );
-
-    currentDate.setDate(currentDate.getDate() + 1);
   }
 
   // Calculate summary using Decimal arithmetic to avoid precision loss.
@@ -215,6 +213,26 @@ interface GapFillOutput {
   avgContribution: string;
 }
 
+/**
+ * Midnight UTC of every calendar day from `start`'s UTC day through `end`.
+ *
+ * Daily buckets come from UTC date truncation in SQL, so the walk steps in UTC.
+ * Stepping with local-time `setDate` breaks when the server is not on UTC: a
+ * DST change makes a "day" 23 or 25 hours long, so the UTC label it lands on
+ * can repeat or skip a date (#1496).
+ */
+export function utcDaysInRange(start: Date, end: Date): Date[] {
+  const days: Date[] = [];
+  const cursor = new Date(
+    Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()),
+  );
+  while (cursor <= end) {
+    days.push(new Date(cursor));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return days;
+}
+
 export function fillGaps(
   results: GapFillInput[],
   period: string,
@@ -238,7 +256,11 @@ export function fillGaps(
   }
 
   const filled: GapFillOutput[] = [];
-  const cursor = new Date(from);
+  // Daily buckets are UTC days (DATE_TRUNC('day')), so start on one (#1496).
+  const cursor =
+    period === "monthly" || period === "weekly"
+      ? new Date(from)
+      : new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate()));
 
   while (cursor <= to) {
     let key: string;
@@ -256,7 +278,7 @@ export function fillGaps(
     } else {
       key = cursor.toISOString().split("T")[0];
       nextCursor = new Date(cursor);
-      nextCursor.setDate(cursor.getDate() + 1);
+      nextCursor.setUTCDate(cursor.getUTCDate() + 1);
     }
 
     const existing = dataMap.get(key);

@@ -6,6 +6,15 @@ import { escapeHtml } from "./email.js";
 
 const PROFILE_BATCH_SIZE = 100;
 
+/**
+ * A profile emailed this recently is skipped (#1499). If a run fails part way,
+ * its claim is released and the retry starts again from the first profile;
+ * without this, everyone emailed before the failure gets the week's digest
+ * twice. Six days is shorter than the 7-day cadence, so it never suppresses
+ * next week's digest, and longer than any retry of the current week.
+ */
+export const DIGEST_RESEND_GUARD_MS = 6 * 24 * 60 * 60 * 1000;
+
 export async function sendWeeklyDigests(
   prismaClient = prisma,
   sendEmailFn: typeof defaultSendEmail = defaultSendEmail,
@@ -37,6 +46,11 @@ export async function sendWeeklyDigests(
     let errors = 0;
 
     for (const profile of profiles) {
+      const lastSentAt = profile.notificationPreferences?.lastWeeklyDigestSentAt;
+      if (lastSentAt && Date.now() - lastSentAt.getTime() < DIGEST_RESEND_GUARD_MS) {
+        continue;
+      }
+
       try {
         const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
@@ -141,6 +155,19 @@ export async function sendWeeklyDigests(
         });
 
         profilesEmailed++;
+
+        try {
+          await prismaClient.notificationPreferences.update({
+            where: { profileId: profile.id },
+            data: { lastWeeklyDigestSentAt: new Date() },
+          });
+        } catch (markErr) {
+          // The email went out; only the marker failed, so a retry could resend.
+          logger.warn(
+            { err: markErr, profileId: profile.id },
+            "Weekly digest sent but could not record it; a retry may resend",
+          );
+        }
       } catch (err) {
         logger.error(
           { err, profileId: profile.id },
