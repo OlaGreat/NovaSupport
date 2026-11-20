@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
-import { sanitizeString, sanitizeObject } from "./sanitize.js";
+import type { Request, Response } from "express";
+import { sanitizeString, sanitizeObject, sanitizeQuery } from "./sanitize.js";
 
 describe("Sanitization Security Tests", () => {
   describe("XSS Prevention", () => {
@@ -333,5 +334,91 @@ describe("Sanitization Security Tests", () => {
       assert.ok(!result.includes("!"));
       assert.ok(violations.length > 0);
     });
+  });
+});
+
+describe("name field length cap (#1521)", () => {
+  it("caps name at the same 64 characters as displayName", () => {
+    const long = "a".repeat(100);
+    const name = sanitizeString("name", long);
+    const displayName = sanitizeString("displayName", long);
+    assert.strictEqual(name.result.length, 64);
+    assert.strictEqual(name.result, displayName.result);
+    assert.ok(name.violations.some((v) => v.includes("maximum length of 64")));
+  });
+
+  it("leaves a name at exactly the cap untouched", () => {
+    const exact = "b".repeat(64);
+    const { result, violations } = sanitizeString("name", exact);
+    assert.strictEqual(result, exact);
+    assert.deepStrictEqual(violations, []);
+  });
+
+  it("still strips HTML from name", () => {
+    const { result } = sanitizeString("name", "<b>Ada</b> Lovelace");
+    assert.strictEqual(result, "Ada Lovelace");
+  });
+
+  it("caps a nested name field in a request body", () => {
+    const { result } = sanitizeObject({ team: { name: "x".repeat(500) } });
+    assert.strictEqual((result as { team: { name: string } }).team.name.length, 64);
+  });
+});
+
+describe("sanitizeQuery array values (#1523)", () => {
+  function runQuery(query: Record<string, unknown>): Record<string, unknown> {
+    const req = {
+      query,
+      method: "GET",
+      path: "/test",
+      ip: "127.0.0.1",
+      get: () => undefined,
+    } as unknown as Request;
+    let nextCalled = false;
+    sanitizeQuery(req, {} as Response, () => {
+      nextCalled = true;
+    });
+    assert.ok(nextCalled, "next() must be called");
+    return req.query as Record<string, unknown>;
+  }
+
+  it("strips HTML from items of an unknown array parameter", () => {
+    const query = runQuery({ tag: ["<script>alert(1)</script>safe", "<b>bold</b>"] });
+    assert.deepStrictEqual(query.tag, ["safe", "bold"]);
+  });
+
+  it("applies the field's own rules to a known array parameter", () => {
+    const query = runQuery({ username: ["  MixedCase  ", "x".repeat(40)] });
+    const [lowered, capped] = query.username as string[];
+    assert.strictEqual(lowered, "mixedcase");
+    assert.strictEqual(capped.length, 32);
+  });
+
+  it("caps a repeated name parameter like a single one", () => {
+    const query = runQuery({ name: ["n".repeat(100)] });
+    assert.strictEqual((query.name as string[])[0].length, 64);
+  });
+
+  it("validates URL items of a repeated url parameter", () => {
+    const query = runQuery({ url: ["javascript:alert(1)", "example.com"] });
+    assert.deepStrictEqual(query.url, ["", "https://example.com/"]);
+  });
+
+  it("validates social handle items", () => {
+    const query = runQuery({ twitterHandle: ["@valid_handle"] });
+    assert.deepStrictEqual(query.twitterHandle, ["valid_handle"]);
+  });
+
+  it("treats array items the same way as a single value of the same key", () => {
+    const single = runQuery({ bio: "<img src=x onerror=alert(1)>hi" });
+    const repeated = runQuery({ bio: ["<img src=x onerror=alert(1)>hi"] });
+    assert.deepStrictEqual(repeated.bio, [single.bio]);
+  });
+
+  it("leaves non-string array items and clean values unchanged", () => {
+    const nested = { inner: "value" };
+    const query = runQuery({ page: "2", ids: ["a", nested] });
+    assert.strictEqual(query.page, "2");
+    assert.deepStrictEqual(query.ids, ["a", nested]);
   });
 });

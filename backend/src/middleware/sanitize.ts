@@ -91,6 +91,9 @@ const MAX_LENGTHS = {
   message: 280,
   description: 1000,
   displayName: 64,
+  // "name" is HTML-stripped like displayName and holds the same kind of
+  // value, so it gets the same cap (#1521).
+  name: 64,
   title: 200,
   username: 32,
   twitterHandle: 15,
@@ -342,6 +345,25 @@ export function sanitizeString(
   };
 }
 
+/**
+ * The field whose rules apply to string items of an array named `fieldName`.
+ * A known field keeps its own rules (length cap, HTML stripping, URL/handle/
+ * email validation); anything else falls back to "message" so unknown array
+ * fields still get HTML stripping instead of silently bypassing XSS
+ * protection. Shared by request bodies and query strings (#1523).
+ */
+function arrayItemRulesKey(fieldName: string | undefined): string {
+  const isKnownField =
+    fieldName !== undefined &&
+    (HTML_CONTENT_FIELDS.has(fieldName) ||
+      URL_FIELDS.has(fieldName) ||
+      SOCIAL_HANDLE_FIELDS.has(fieldName) ||
+      EMAIL_FIELDS.has(fieldName) ||
+      LOWERCASE_FIELDS.has(fieldName) ||
+      (MAX_LENGTHS as Record<string, unknown>)[fieldName] !== undefined);
+  return isKnownField ? (fieldName as string) : "message";
+}
+
 export function sanitizeObject(
   obj: unknown,
   depth = 0,
@@ -354,18 +376,7 @@ export function sanitizeObject(
   }
 
   if (Array.isArray(obj)) {
-    // Use the parent field's rules when it is a known field; otherwise fall
-    // back to "message" so unknown array fields still get HTML stripping
-    // instead of silently bypassing XSS protection.
-    const isKnownField =
-      parentKey !== undefined &&
-      (HTML_CONTENT_FIELDS.has(parentKey) ||
-        URL_FIELDS.has(parentKey) ||
-        SOCIAL_HANDLE_FIELDS.has(parentKey) ||
-        EMAIL_FIELDS.has(parentKey) ||
-        LOWERCASE_FIELDS.has(parentKey) ||
-        (MAX_LENGTHS as Record<string, unknown>)[parentKey] !== undefined);
-    const itemKey = isKnownField ? (parentKey as string) : "message";
+    const itemKey = arrayItemRulesKey(parentKey);
     let changed = false;
     const result = obj.map((item, index) => {
       if (typeof item === "string") {
@@ -488,10 +499,14 @@ export function sanitizeQuery(
       if (fieldChanged) changed = true;
       violations.push(...fieldViolations.map(v => `${key}: ${v}`));
     } else if (Array.isArray(value)) {
+      // Repeated or array-shaped parameters (?tag=a&tag=b, ?tag[]=a) get the
+      // same per-field rules as a single value, with the same HTML-stripping
+      // fallback for unknown fields that request bodies use (#1523).
+      const itemKey = arrayItemRulesKey(key);
       const sanitizedArray: unknown[] = [];
       value.forEach((v, index) => {
         if (typeof v === "string") {
-          const { result, changed: itemChanged, violations: itemViolations } = sanitizeString(`${key}_item`, v);
+          const { result, changed: itemChanged, violations: itemViolations } = sanitizeString(itemKey, v);
           sanitizedArray.push(result);
           if (itemChanged) changed = true;
           violations.push(...itemViolations.map(viol => `${key}[${index}]: ${viol}`));
