@@ -346,22 +346,65 @@ describe("Analytics Tests", () => {
   });
 
   describe("clearAnalyticsCache", () => {
+    const rangeStart = new Date("2025-01-01");
+    const rangeEnd = new Date("2025-01-05");
+
+    async function addTransaction(amount: string): Promise<void> {
+      await prisma.supportTransaction.create({
+        data: {
+          txHash: `test-tx-clear-${Date.now()}-${Math.random()}`,
+          amount,
+          assetCode: "XLM",
+          status: "SUCCESS",
+          stellarNetwork: "TESTNET",
+          recipientAddress: "GTEST" + "A".repeat(51),
+          supporterAddress: "SUPPCLR" + "A".repeat(49),
+          profileId: testProfileId,
+          createdAt: new Date("2025-01-02"),
+        },
+      });
+    }
+
     it("should clear cache for specific profile", async () => {
-      await getAnalytics(testProfileId);
+      clearAnalyticsCache(testProfileId);
+      const before = await getAnalytics(testProfileId, rangeStart, rangeEnd);
+      const beforeTotal = before.summary.totalRaised;
+
+      await addTransaction("123");
+
+      // Without clearing, the stale cached total is returned
+      const cached = await getAnalytics(testProfileId, rangeStart, rangeEnd);
+      assert.strictEqual(cached.summary.totalRaised, beforeTotal);
+
       clearAnalyticsCache(testProfileId);
 
-      // Cache should be cleared, so next call will hit database
-      const analytics = await getAnalytics(testProfileId);
-      assert.ok(analytics);
+      // After clearing, the fresh total must reflect the new transaction
+      const after = await getAnalytics(testProfileId, rangeStart, rangeEnd);
+      assert.strictEqual(
+        Number(after.summary.totalRaised),
+        Number(beforeTotal) + 123,
+      );
     });
 
     it("should clear all cache when no profileId specified", async () => {
-      await getAnalytics(testProfileId);
+      clearAnalyticsCache();
+      const before = await getAnalytics(testProfileId, rangeStart, rangeEnd);
+      const beforeTotal = before.summary.totalRaised;
+
+      await addTransaction("77");
+
+      // Without clearing, the stale cached total is returned
+      const cached = await getAnalytics(testProfileId, rangeStart, rangeEnd);
+      assert.strictEqual(cached.summary.totalRaised, beforeTotal);
+
       clearAnalyticsCache();
 
-      // All cache should be cleared
-      const analytics = await getAnalytics(testProfileId);
-      assert.ok(analytics);
+      // After clearing, the fresh total must reflect the new transaction
+      const after = await getAnalytics(testProfileId, rangeStart, rangeEnd);
+      assert.strictEqual(
+        Number(after.summary.totalRaised),
+        Number(beforeTotal) + 77,
+      );
     });
   });
 });
