@@ -1,230 +1,436 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`Component Snapshots > AppShell matches snapshot 1`] = `
+<div>
+  <main
+    class="min-h-screen px-6 py-8 sm:px-10 bg-ink dark:bg-black transition-colors"
+  >
+    <div
+      class="mx-auto max-w-6xl"
+    >
+      <header
+        class="mb-10 flex flex-col gap-6 rounded-[2rem] border border-white/10 dark:border-white/20 bg-grid bg-[size:26px_26px] bg-center px-6 py-6 shadow-2xl shadow-black/25 dark:shadow-black/50"
+      >
+        <div
+          class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+        >
+          <div>
+            <a
+              href="/"
+            >
+              NovaSupport
+            </a>
+            <p
+              class="mt-2 max-w-2xl text-sm text-sky/80 dark:text-sky/90"
+            >
+              Stellar-native creator support on 
+              Testnet
+               with Freighter, Horizon, and a Soroban-ready contract path.
+            </p>
+          </div>
+          <div
+            class="flex items-center gap-3"
+          >
+            <nav
+              class="flex flex-wrap items-center gap-3 text-sm text-sky/80 dark:text-sky/90"
+            >
+              <a
+                href="/"
+              >
+                Home
+              </a>
+              <a
+                href="/explore"
+              >
+                Explore
+              </a>
+              <a
+                href="/profile/stellar-dev"
+              >
+                Sample profile
+              </a>
+              <a
+                href="/create"
+              >
+                Create draft
+              </a>
+              <a
+                href="/recurring"
+              >
+                Recurring support
+              </a>
+              <a
+                href="/settings"
+              >
+                Settings
+              </a>
+            </nav>
+            <button
+              data-testid="theme-toggle"
+            >
+              Toggle
+            </button>
+          </div>
+        </div>
+        <div
+          class="relative"
+        >
+          <input
+            class="w-full rounded-xl border border-white/10 dark:border-white/20 bg-white/5 dark:bg-white/10 px-4 py-2 text-sm text-white placeholder:text-sky/50 dark:placeholder:text-sky/60 focus:border-mint/50 focus:outline-none"
+            placeholder="Search creators..."
+            type="text"
+            value=""
+          />
+        </div>
+      </header>
+      <section
+        class="mb-8"
+      >
+        <div
+          data-testid="wallet-connect"
+        >
+          WalletConnect
+        </div>
+      </section>
+      <div
+        data-testid="child-content"
+      >
+        Page content
+      </div>
+    </div>
+  </main>
+</div>
+`;
+
 exports[`Component Snapshots > ProfileSkeleton matches snapshot 1`] = `
 <div>
   <div
-    class="space-y-12 animate-fade-in"
+    class="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-8 items-start"
   >
     <div
-      class="space-y-3"
-    >
-      <article
-        class="rounded-[2rem] border border-white/10 bg-white/[0.04] p-5 sm:p-7"
-      >
-        <div
-          class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
-        >
-          <div
-            class="flex gap-4"
-          >
-            <div
-              class="animate-pulse bg-white/10 w-16 h-16 rounded-full"
-            />
-            <div
-              class="space-y-3"
-            >
-              <div
-                class="animate-pulse rounded-md bg-white/10 h-3 w-20"
-              />
-              <div
-                class="animate-pulse rounded-md bg-white/10 h-8 w-48 sm:w-64"
-              />
-              <div
-                class="space-y-2 mt-4"
-              >
-                <div
-                  class="animate-pulse rounded-md bg-white/10 h-4 w-full sm:w-[400px]"
-                />
-                <div
-                  class="animate-pulse rounded-md bg-white/10 h-4 w-3/4 sm:w-[300px]"
-                />
-              </div>
-              <div
-                class="mt-6 flex flex-wrap gap-8 items-center border-t border-white/5 pt-6"
-              >
-                <div
-                  class="space-y-2"
-                >
-                  <div
-                    class="animate-pulse rounded-md bg-white/10 h-3 w-24"
-                  />
-                  <div
-                    class="animate-pulse rounded-md bg-white/10 h-4 w-32"
-                  />
-                </div>
-                <div
-                  class="space-y-2"
-                >
-                  <div
-                    class="animate-pulse rounded-md bg-white/10 h-3 w-24"
-                  />
-                  <div
-                    class="animate-pulse rounded-md bg-white/10 h-4 w-32"
-                  />
-                </div>
-                <div
-                  class="space-y-2"
-                >
-                  <div
-                    class="animate-pulse rounded-md bg-white/10 h-3 w-24"
-                  />
-                  <div
-                    class="animate-pulse rounded-md bg-white/10 h-4 w-32"
-                  />
-                </div>
-              </div>
-              <div
-                class="mt-4 flex flex-wrap gap-2"
-              >
-                <div
-                  class="animate-pulse bg-white/10 h-8 w-24 rounded-full"
-                />
-                <div
-                  class="animate-pulse bg-white/10 h-8 w-32 rounded-full"
-                />
-              </div>
-            </div>
-          </div>
-          <div
-            class="w-full sm:w-48 h-24 rounded-3xl border border-white/5 bg-white/[0.02]"
-          />
-        </div>
-        <div
-          class="mt-8"
-        >
-          <div
-            class="animate-pulse rounded-md bg-white/10 h-4 w-32 mb-3"
-          />
-          <div
-            class="flex flex-wrap gap-3"
-          >
-            <div
-              class="animate-pulse bg-white/10 h-9 w-20 rounded-full"
-            />
-            <div
-              class="animate-pulse bg-white/10 h-9 w-20 rounded-full"
-            />
-            <div
-              class="animate-pulse bg-white/10 h-9 w-20 rounded-full"
-            />
-          </div>
-        </div>
-      </article>
-      <div
-        class="animate-pulse bg-white/10 h-10 w-full rounded-2xl"
-      />
-    </div>
-    <div
-      class="px-2 space-y-4"
+      class="space-y-12"
     >
       <div
-        class="animate-pulse rounded-md bg-white/10 h-3 w-32"
-      />
-      <div
-        class="space-y-4"
+        class="rounded-[2.5rem] border border-white/5 bg-white/[0.02] p-6 sm:p-8 animate-pulse"
       >
         <div
-          class="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-4"
+          class="flex flex-col sm:flex-row gap-6 items-start"
         >
           <div
-            class="flex justify-between"
+            class="h-24 w-24 rounded-full bg-white/10 shrink-0"
+          />
+          <div
+            class="flex-1 w-full space-y-4"
           >
             <div
-              class="space-y-2"
+              class="h-8 w-1/3 bg-white/10 rounded-lg"
+            />
+            <div
+              class="h-4 w-1/4 bg-white/10 rounded-lg"
+            />
+            <div
+              class="space-y-2 mt-4"
             >
               <div
-                class="animate-pulse rounded-md bg-white/10 h-4 w-48"
+                class="h-4 w-full bg-white/10 rounded"
               />
               <div
-                class="animate-pulse rounded-md bg-white/10 h-3 w-64"
+                class="h-4 w-5/6 bg-white/10 rounded"
+              />
+              <div
+                class="h-4 w-4/6 bg-white/10 rounded"
+              />
+            </div>
+          </div>
+        </div>
+        <div
+          class="mt-8 flex flex-wrap gap-4"
+        >
+          <div
+            class="h-10 w-24 bg-white/10 rounded-xl"
+          />
+          <div
+            class="h-10 w-32 bg-white/10 rounded-xl"
+          />
+          <div
+            class="h-10 w-28 bg-white/10 rounded-xl"
+          />
+        </div>
+      </div>
+      <div
+        class="rounded-[2.5rem] border border-white/5 bg-white/[0.02] p-6 sm:p-8 animate-pulse mt-8"
+      >
+        <div
+          class="h-5 w-40 bg-white/10 rounded mb-6"
+        />
+        <div
+          class="space-y-4"
+        >
+          <div
+            class="flex items-center gap-4"
+          >
+            <div
+              class="h-12 w-12 rounded-full bg-white/10 shrink-0"
+            />
+            <div
+              class="flex-1 space-y-2"
+            >
+              <div
+                class="h-4 w-1/3 bg-white/10 rounded"
+              />
+              <div
+                class="h-3 w-1/4 bg-white/10 rounded"
               />
             </div>
             <div
-              class="animate-pulse rounded-md bg-white/10 h-4 w-16"
+              class="h-6 w-16 bg-white/10 rounded"
             />
           </div>
           <div
-            class="space-y-2"
+            class="flex items-center gap-4"
           >
             <div
-              class="animate-pulse bg-white/10 h-2 w-full rounded-full"
+              class="h-12 w-12 rounded-full bg-white/10 shrink-0"
             />
             <div
-              class="flex justify-between"
+              class="flex-1 space-y-2"
             >
               <div
-                class="animate-pulse rounded-md bg-white/10 h-3 w-24"
+                class="h-4 w-1/3 bg-white/10 rounded"
               />
               <div
-                class="animate-pulse rounded-md bg-white/10 h-3 w-8"
+                class="h-3 w-1/4 bg-white/10 rounded"
               />
             </div>
+            <div
+              class="h-6 w-16 bg-white/10 rounded"
+            />
+          </div>
+          <div
+            class="flex items-center gap-4"
+          >
+            <div
+              class="h-12 w-12 rounded-full bg-white/10 shrink-0"
+            />
+            <div
+              class="flex-1 space-y-2"
+            >
+              <div
+                class="h-4 w-1/3 bg-white/10 rounded"
+              />
+              <div
+                class="h-3 w-1/4 bg-white/10 rounded"
+              />
+            </div>
+            <div
+              class="h-6 w-16 bg-white/10 rounded"
+            />
           </div>
         </div>
       </div>
     </div>
-    <div
-      class="px-2"
+    <aside
+      class="space-y-6"
     >
       <div
-        class="animate-pulse bg-white/10 h-10 w-full rounded-xl"
-      />
-    </div>
+        class="rounded-[2rem] border border-white/5 bg-white/[0.02] p-6 animate-pulse"
+      >
+        <div
+          class="h-6 w-32 bg-white/10 rounded mb-6"
+        />
+        <div
+          class="grid grid-cols-3 gap-3 mb-6"
+        >
+          <div
+            class="h-12 bg-white/10 rounded-xl"
+          />
+          <div
+            class="h-12 bg-white/10 rounded-xl"
+          />
+          <div
+            class="h-12 bg-white/10 rounded-xl"
+          />
+        </div>
+        <div
+          class="h-14 bg-white/10 rounded-full"
+        />
+      </div>
+      <div
+        class="rounded-[2rem] border border-white/5 bg-white/[0.02] p-6 animate-pulse"
+      >
+        <div
+          class="h-4 w-32 bg-white/10 rounded mb-6"
+        />
+        <div
+          class="space-y-4"
+        >
+          <div
+            class="flex justify-between items-center"
+          >
+            <div
+              class="h-4 w-20 bg-white/10 rounded"
+            />
+            <div
+              class="h-4 w-24 bg-white/10 rounded"
+            />
+            <div
+              class="h-4 w-16 bg-white/10 rounded"
+            />
+          </div>
+          <div
+            class="flex justify-between items-center"
+          >
+            <div
+              class="h-4 w-20 bg-white/10 rounded"
+            />
+            <div
+              class="h-4 w-24 bg-white/10 rounded"
+            />
+            <div
+              class="h-4 w-16 bg-white/10 rounded"
+            />
+          </div>
+          <div
+            class="flex justify-between items-center"
+          >
+            <div
+              class="h-4 w-20 bg-white/10 rounded"
+            />
+            <div
+              class="h-4 w-24 bg-white/10 rounded"
+            />
+            <div
+              class="h-4 w-16 bg-white/10 rounded"
+            />
+          </div>
+          <div
+            class="flex justify-between items-center"
+          >
+            <div
+              class="h-4 w-20 bg-white/10 rounded"
+            />
+            <div
+              class="h-4 w-24 bg-white/10 rounded"
+            />
+            <div
+              class="h-4 w-16 bg-white/10 rounded"
+            />
+          </div>
+        </div>
+      </div>
+      <div
+        class="rounded-[2rem] border border-white/5 bg-white/[0.02] p-6 animate-pulse"
+      >
+        <div
+          class="h-4 w-32 bg-white/10 rounded mb-6"
+        />
+        <div
+          class="space-y-4"
+        >
+          <div
+            class="flex justify-between items-center"
+          >
+            <div
+              class="h-4 w-24 bg-white/10 rounded"
+            />
+            <div
+              class="h-4 w-16 bg-white/10 rounded"
+            />
+          </div>
+          <div
+            class="flex justify-between items-center"
+          >
+            <div
+              class="h-4 w-20 bg-white/10 rounded"
+            />
+            <div
+              class="h-4 w-8 bg-white/10 rounded"
+            />
+          </div>
+          <div
+            class="w-full bg-white/5 h-1.5 rounded-full mt-2"
+          />
+        </div>
+      </div>
+    </aside>
   </div>
 </div>
 `;
 
-exports[`Component Snapshots > ProfileTabs matches snapshot 1`] = `
+exports[`Component Snapshots > QRCodeButton matches snapshot 1`] = `
 <div>
   <div
-    class="space-y-6"
+    class="relative"
   >
-    <div
-      class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-white/5 pb-1"
+    <button
+      aria-label="Show QR code"
+      class="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-sky/80 transition hover:bg-white/10 hover:text-white"
+      type="button"
     >
-      <div
-        class="flex gap-8"
+      <svg
+        aria-hidden="true"
+        class="lucide lucide-qr-code"
+        fill="none"
+        height="14"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        width="14"
+        xmlns="http://www.w3.org/2000/svg"
       >
-        <button
-          class="flex items-center gap-2 border-b-2 py-4 text-sm font-semibold transition-all border-mint text-mint"
-        >
-          <span>
-            HistoryIcon
-          </span>
-          Support History
-        </button>
-        <button
-          class="flex items-center gap-2 border-b-2 py-4 text-sm font-semibold transition-all border-transparent text-steel hover:text-white"
-        >
-          <span>
-            AwardIcon
-          </span>
-          Badges
-        </button>
-      </div>
-      <a
-        href="/dashboard/testuser"
-      >
-        <span>
-          DashboardIcon
-        </span>
-        View Dashboard
-      </a>
-    </div>
-    <div
-      animate="[object Object]"
-      class="min-h-[300px]"
-      exit="[object Object]"
-      initial="[object Object]"
-    >
-      <div
-        class="flex h-40 items-center justify-center"
-      >
-        <div
-          class="h-8 w-8 animate-spin rounded-full border-2 border-mint border-t-transparent"
+        <rect
+          height="5"
+          rx="1"
+          width="5"
+          x="3"
+          y="3"
         />
-      </div>
-    </div>
+        <rect
+          height="5"
+          rx="1"
+          width="5"
+          x="16"
+          y="3"
+        />
+        <rect
+          height="5"
+          rx="1"
+          width="5"
+          x="3"
+          y="16"
+        />
+        <path
+          d="M21 16h-3a2 2 0 0 0-2 2v3"
+        />
+        <path
+          d="M21 21v.01"
+        />
+        <path
+          d="M12 7v3a2 2 0 0 1-2 2H7"
+        />
+        <path
+          d="M3 12h.01"
+        />
+        <path
+          d="M12 3h.01"
+        />
+        <path
+          d="M12 16v.01"
+        />
+        <path
+          d="M16 12h1"
+        />
+        <path
+          d="M21 12v.01"
+        />
+        <path
+          d="M12 21v-1"
+        />
+      </svg>
+      QR Code
+    </button>
   </div>
 </div>
 `;
