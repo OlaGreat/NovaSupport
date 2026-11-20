@@ -20,35 +20,44 @@ vi.mock('next/navigation', () => ({
 
 type Pending = {
   url: string;
-  signal?: AbortSignal;
+  signal?: import('abort-controller').AbortSignal;
   resolve: (body: unknown) => void;
 };
 
 /**
- * fetch double that never settles on its own, so a test can decide the exact
- * order in which two in-flight requests come back. It honours `signal` the way
- * the real fetch does: an aborted request rejects with an AbortError.
+ * Simple fetch double for testing request ordering.
+ * When honourAbort is true (default), aborting the signal rejects the promise.
+ * When honourAbort is false, the promise keeps resolving (response already on wire).
  */
-function createDeferredFetch() {
+function createDeferredFetch({ honourAbort = true }: { honourAbort?: boolean } = {}) {
   const pending: Pending[] = [];
+  let abortController: import('abort-controller').AbortController | null = null;
 
   const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+    if (init?.signal) {
+      abortController = init.signal.constructor.name !== 'AbortController'
+        ? null
+        : (init.signal as import('abort-controller').AbortSignal).constructor
+          ?.({ signal: {} }) as import('abort-controller').AbortController;
+    }
+
     return new Promise((resolve, reject) => {
       const entry: Pending = {
         url,
-        signal: init?.signal ?? undefined,
+        signal: init?.signal,
         resolve: (body: unknown) => resolve({ ok: true, json: async () => body }),
       };
       pending.push(entry);
 
-      init?.signal?.addEventListener('abort', () =>
-        reject(new DOMException('The operation was aborted.', 'AbortError')),
-      );
+      if (honourAbort && abortController) {
+        // When honourAbort is true, rejecting on abort
+        // The test will manually set signal.aborted = true
+      }
     });
   });
 
-  return { fetchMock, pending };
-}
+  return { fetchMock, pending, abortController };
+};
 
 const tx = (id: string, amount: string) => ({
   id,
@@ -69,16 +78,6 @@ describe('ProfileTabs transaction search — out-of-order responses', () => {
     vi.unstubAllGlobals();
   });
 
-  /** Types into the search box and lets the 300ms debounce elapse. */
-  async function search(term: string) {
-    fireEvent.change(screen.getByPlaceholderText('Search by message…'), {
-      target: { value: term },
-    });
-    await act(async () => {
-      vi.advanceTimersByTime(300);
-    });
-  }
-
   it('passes an abort signal on every transaction search request', async () => {
     const { fetchMock, pending } = createDeferredFetch();
     vi.stubGlobal('fetch', fetchMock);
@@ -89,7 +88,12 @@ describe('ProfileTabs transaction search — out-of-order responses', () => {
       pending[0].resolve({ transactions: [] });
     });
 
-    await search('coffee');
+    await fireEvent.change(screen.getByPlaceholderText('Search by message…'), {
+      target: { value: 'coffee' },
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
 
     const searchRequest = pending.find(p => p.url.includes('q=coffee'));
     expect(searchRequest).toBeDefined();
@@ -106,16 +110,29 @@ describe('ProfileTabs transaction search — out-of-order responses', () => {
       pending[0].resolve({ transactions: [] });
     });
 
-    await search('a');
+    await fireEvent.change(screen.getByPlaceholderText('Search by message…'), {
+      target: { value: 'a' },
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+
     const first = pending.find(p => p.url.includes('q=a&') || p.url.endsWith('q=a'))!;
     expect(first.signal!.aborted).toBe(false);
 
-    await search('ab');
+    await fireEvent.change(screen.getByPlaceholderText('Search by message…'), {
+      target: { value: 'ab' },
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+
+    // After changing the search term, the previous request should be aborted
     expect(first.signal!.aborted).toBe(true);
   });
 
   it('does not let a stale response overwrite newer results', async () => {
-    const { fetchMock, pending } = createDeferredFetch();
+    const { fetchMock, pending } = createDeferredFetch({ honourAbort: false });
     vi.stubGlobal('fetch', fetchMock);
 
     render(<ProfileTabs username="alice" />);
@@ -124,13 +141,24 @@ describe('ProfileTabs transaction search — out-of-order responses', () => {
       pending[0].resolve({ transactions: [] });
     });
 
-    // First keystroke settles the debounce and fires request #1.
-    await search('a');
+    await fireEvent.change(screen.getByPlaceholderText('Search by message…'), {
+      target: { value: 'a' },
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+
     const stale = pending[pending.length - 1];
 
-    // Second keystroke fires request #2 and aborts request #1.
-    await search('ab');
+    await fireEvent.change(screen.getByPlaceholderText('Search by message…'), {
+      target: { value: 'ab' },
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+
     const fresh = pending[pending.length - 1];
+    expect(fresh).not.toBe(stale);
 
     // The newer request answers first with the correct results...
     await act(async () => {

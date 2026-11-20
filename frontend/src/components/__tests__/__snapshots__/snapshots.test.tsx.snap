@@ -357,165 +357,80 @@ exports[`Component Snapshots > ProfileSkeleton matches snapshot 1`] = `
 </div>
 `;
 
-exports[`Component Snapshots > ProfileTabs matches snapshot 1`] = `
+exports[`Component Snapshots > QRCodeButton matches snapshot 1`] = `
 <div>
   <div
-    class="space-y-6"
+    class="relative"
   >
-    <div
-      class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-white/5 pb-1"
+    <button
+      aria-label="Show QR code"
+      class="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-sky/80 transition hover:bg-white/10 hover:text-white"
+      type="button"
     >
-      <div
-        aria-label="Profile sections"
-        class="flex gap-8"
-        role="tablist"
+      <svg
+        aria-hidden="true"
+        class="lucide lucide-qr-code"
+        fill="none"
+        height="14"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        width="14"
+        xmlns="http://www.w3.org/2000/svg"
       >
-        <button
-          aria-controls="profile-tabpanel-history"
-          aria-selected="true"
-          class="flex items-center gap-2 border-b-2 py-4 text-sm font-semibold transition-all border-mint text-mint"
-          id="profile-tab-history"
-          role="tab"
-          tabindex="0"
-          type="button"
-        >
-          <span>
-            HistoryIcon
-          </span>
-          Support History
-        </button>
-        <button
-          aria-controls="profile-tabpanel-badges"
-          aria-selected="false"
-          class="flex items-center gap-2 border-b-2 py-4 text-sm font-semibold transition-all border-transparent text-steel hover:text-white"
-          id="profile-tab-badges"
-          role="tab"
-          tabindex="-1"
-          type="button"
-        >
-          <span>
-            AwardIcon
-          </span>
-          Badges
-        </button>
-      </div>
-      <a
-        href="/dashboard/testuser"
-      >
-        <span>
-          DashboardIcon
-        </span>
-        View Dashboard
-      </a>
-    </div>
-    <div
-      animate="[object Object]"
-      aria-labelledby="profile-tab-history"
-      class="min-h-[300px] space-y-4"
-      exit="[object Object]"
-      id="profile-tabpanel-history"
-      initial="[object Object]"
-      role="tabpanel"
-      tabindex="0"
-    >
-      <div
-        class="flex flex-col sm:flex-row gap-3"
-      >
-        <div
-          class="relative flex-1"
-        >
-          <svg
-            aria-hidden="true"
-            class="lucide lucide-search absolute left-3 top-1/2 -translate-y-1/2 text-steel"
-            fill="none"
-            height="14"
-            stroke="currentColor"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            viewBox="0 0 24 24"
-            width="14"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              d="m21 21-4.34-4.34"
-            />
-            <circle
-              cx="11"
-              cy="11"
-              r="8"
-            />
-          </svg>
-          <input
-            class="w-full rounded-xl border border-white/10 bg-white/5 pl-9 pr-9 py-2 text-sm text-white placeholder:text-steel focus:border-mint/40 focus:outline-none focus:ring-1 focus:ring-mint/30 transition"
-            placeholder="Search by message…"
-            type="text"
-            value=""
-          />
-        </div>
-        <div
-          class="flex items-center gap-2 flex-shrink-0"
-        >
-          <svg
-            aria-hidden="true"
-            class="lucide lucide-calendar text-steel hidden sm:block"
-            fill="none"
-            height="14"
-            stroke="currentColor"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            viewBox="0 0 24 24"
-            width="14"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              d="M8 2v4"
-            />
-            <path
-              d="M16 2v4"
-            />
-            <rect
-              height="18"
-              rx="2"
-              width="18"
-              x="3"
-              y="4"
-            />
-            <path
-              d="M3 10h18"
-            />
-          </svg>
-          <button
-            class="rounded-lg px-3 py-1.5 text-xs font-semibold transition bg-mint text-midnight"
-          >
-            All time
-          </button>
-          <button
-            class="rounded-lg px-3 py-1.5 text-xs font-semibold transition bg-white/5 text-steel hover:text-white hover:bg-white/10"
-          >
-            Last 7d
-          </button>
-          <button
-            class="rounded-lg px-3 py-1.5 text-xs font-semibold transition bg-white/5 text-steel hover:text-white hover:bg-white/10"
-          >
-            Last 30d
-          </button>
-          <button
-            class="rounded-lg px-3 py-1.5 text-xs font-semibold transition bg-white/5 text-steel hover:text-white hover:bg-white/10"
-          >
-            Custom
-          </button>
-        </div>
-      </div>
-      <div
-        class="flex h-40 items-center justify-center"
-      >
-        <div
-          class="h-8 w-8 animate-spin rounded-full border-2 border-mint border-t-transparent"
+        <rect
+          height="5"
+          rx="1"
+          width="5"
+          x="3"
+          y="3"
         />
-      </div>
-    </div>
+        <rect
+          height="5"
+          rx="1"
+          width="5"
+          x="16"
+          y="3"
+        />
+        <rect
+          height="5"
+          rx="1"
+          width="5"
+          x="3"
+          y="16"
+        />
+        <path
+          d="M21 16h-3a2 2 0 0 0-2 2v3"
+        />
+        <path
+          d="M21 21v.01"
+        />
+        <path
+          d="M12 7v3a2 2 0 0 1-2 2H7"
+        />
+        <path
+          d="M3 12h.01"
+        />
+        <path
+          d="M12 3h.01"
+        />
+        <path
+          d="M12 16v.01"
+        />
+        <path
+          d="M16 12h1"
+        />
+        <path
+          d="M21 12v.01"
+        />
+        <path
+          d="M12 21v-1"
+        />
+      </svg>
+      QR Code
+    </button>
   </div>
 </div>
 `;

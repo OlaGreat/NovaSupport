@@ -1,6 +1,6 @@
 import React from "react";
 import { describe, it, expect, vi } from "vitest";
-import { render } from "@testing-library/react";
+import { render, waitFor } from "@testing-library/react";
 import { ProfileSkeleton } from "../profile-skeleton";
 import { Skeleton } from "../skeleton";
 import { Toast } from "../toast";
@@ -32,8 +32,7 @@ vi.mock("lucide-react", async (importOriginal) => ({
   LayoutDashboard: () => <span>DashboardIcon</span>,
   ExternalLink: () => <span>ExternalLinkIcon</span>,
   CheckCircle2: () => <span>CheckIcon</span>,
-  AlertCircle: () => <span>AlertIcon</span>,
-  X: () => <span>XIcon</span>,
+  AlertCircle: () => <span>XIcon</span>,
 }));
 
 vi.mock("next/link", () => ({
@@ -87,9 +86,53 @@ describe("Component Snapshots", () => {
     expect(container).toMatchSnapshot();
   });
 
-  it("ProfileTabs matches snapshot", () => {
+  it("ProfileTabs matches snapshot (loading state)", () => {
     const { container } = render(<ProfileTabs username="testuser" />);
     expect(container).toMatchSnapshot();
+  });
+
+  it("ProfileTabs matches snapshot (with loaded data)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          transactions: [
+            {
+              id: "tx-1",
+              txHash: "a".repeat(64),
+              amount: "100.0000000",
+              assetCode: "XLM",
+              message: "Great work!",
+              supporterAddress: "GCZJM35NKGVK47BB4SPBDV25477PZYIYPVVG453LPYFNXLS3FGHDXOCM",
+              createdAt: "2024-01-15T10:30:00Z",
+              status: "SUCCESS",
+              memo: null,
+            },
+          ],
+        }),
+      } as unknown as Response),
+    );
+
+    // The row renders a locale- and timezone-dependent date; pin it so the
+    // snapshot is identical on every runner.
+    const toLocaleDateString = vi
+      .spyOn(Date.prototype, "toLocaleDateString")
+      .mockReturnValue("1/15/2024");
+
+    try {
+      const { container } = render(<ProfileTabs username="testuser" />);
+
+      await waitFor(() => {
+        expect(container).toHaveTextContent("100.0000000 XLM");
+      });
+
+      expect(container).toMatchSnapshot();
+    } finally {
+      toLocaleDateString.mockRestore();
+      // Restore the never-resolving mock the loading-state snapshots rely on.
+      vi.stubGlobal("fetch", vi.fn().mockReturnValue(new Promise(() => {})));
+    }
   });
 
   it("AppShell matches snapshot", () => {

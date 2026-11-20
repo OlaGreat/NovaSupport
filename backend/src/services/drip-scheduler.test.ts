@@ -56,21 +56,98 @@ function buildPrismaMock(overrides: {
     Promise.resolve(overrides.recurringSupports ?? [makeSupport()]),
   );
   const recurringSupportUpdate = mock.fn(() => Promise.resolve({}));
-  const recurringSupportExecutionCreate = mock.fn(() => Promise.resolve({}));
+
+  // Executions that a real database would still hold once the transaction has
+  // settled. A create staged inside `$transaction` is only durable if the
+  // callback commits, so `$transaction` truncates this back to its
+  // pre-transaction length when the callback throws — the mock equivalent of
+  // ROLLBACK. A create issued outside the transaction stays, which is what
+  // makes this mock able to catch a regression that moved the insert out of
+  // the transaction.
+  const committedExecutions: ExecutionCreateArg[] = [];
+
+  const recurringSupportExecutionCreate = mock.fn((arg: ExecutionCreateArg) => {
+    committedExecutions.push(arg);
+    return Promise.resolve({});
+  });
+
   const $executeRaw = mock.fn(() => Promise.resolve(overrides.claimCount ?? 1));
-  const $transaction = mock.fn(async (callback: (transaction: unknown) => Promise<unknown>) =>
-    callback({
-      recurringSupportExecution: { create: recurringSupportExecutionCreate },
-      $executeRaw,
-    }),
+  const $transaction = mock.fn(
+    async (callback: (transaction: unknown) => Promise<unknown>) => {
+      const committedBefore = committedExecutions.length;
+      try {
+        return await callback({
+          recurringSupportExecution: { create: recurringSupportExecutionCreate },
+          $executeRaw,
+        });
+      } catch (error) {
+        committedExecutions.length = committedBefore;
+        throw error;
+      }
+    },
   );
 
   return {
     recurringSupport: { findMany: recurringSupportFindMany, update: recurringSupportUpdate },
     recurringSupportExecution: { create: recurringSupportExecutionCreate },
+    committedExecutions,
     $executeRaw,
     $transaction,
   };
+}
+
+function getFirstArg<T>(mockFn: ReturnType<typeof mock.fn>): T {
+  return (mockFn.mock.calls[0]!.arguments[0] as unknown) as T;
+}
+
+function getRawSql(mockFn: ReturnType<typeof mock.fn>): string {
+  const strings = mockFn.mock.calls[0]?.arguments[0] as string[] | undefined;
+  return strings ? strings.join("?") : "";
+}
+
+function getRawValue(mockFn: ReturnType<typeof mock.fn>, index: number): unknown {
+  const args = (mockFn.mock.calls[0] as { arguments: unknown[] }).arguments;
+  return args[index];
+}
+
+function makeDelivery(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "delivery-1",
+    webhookId: "webhook-1",
+    payload: { event: "support.created" },
+    status: "pending",
+    attemptCount: 0,
+    nextRetryAt: new Date(),
+    webhook: { url: "https://example.com/hook", secret: "s3cret" },
+    ...overrides,
+  };
+}
+
+function buildPrismaMock(overrides: {
+  deliveries?: unknown[];
+  claimCount?: number;
+} = {}) {
+  const findMany = mock.fn(() => Promise.resolve(overrides.deliveries ?? [makeDelivery()]));
+  // Final status writes are guarded updateMany calls; record them in `update`.
+  const update = mock.fn((_args: unknown) => Promise.resolve({ count: 1 }));
+  const updateMany = mock.fn((args: { where: { status?: string } }) =>
+    args.where.status === "pending"
+      ? Promise.resolve({ count: overrides.claimCount ?? 1 })
+      : update(args),
+  );
+
+  return {
+    prismaClient: {
+      webhookDelivery: { findMany, update, updateMany },
+    },
+    findMany,
+    updateMany,
+    update,
+  };
+}
+
+function getUpdateData(update: ReturnType<typeof mock.fn>, callIndex = 0): Record<string, unknown> {
+  return (update.mock.calls[callIndex]!.arguments[0] as { data: Record<string, unknown> }).data;
 }
 
 test("processDueRecurringSupports processes active due supports", async () => {
@@ -115,7 +192,7 @@ test("processDueRecurringSupports advances nextRunAt for monthly frequency", asy
   assert.equal(claimedNext.getUTCDate(), 29);
 });
 
-// ── Month-boundary regression test (issue #645) ──────────────────────────────
+// ── Month-boundary regression test (issue #645) ──
 
 test("processDueRecurringSupports does not overflow into the wrong month at month-end boundaries", async () => {
   const jan31 = new Date(Date.UTC(2024, 0, 31, 12, 0, 0));
@@ -132,7 +209,7 @@ test("processDueRecurringSupports does not overflow into the wrong month at mont
   assert.equal(claimedNext.getUTCDate(), 29);
 });
 
-// ── Atomic-claim status guard tests (issue #1051) ────────────────────────────
+// ── Atomic-claim status guard tests (issue #1051) ──
 
 test("processDueRecurringSupports scopes the atomic claim to active subscriptions", async () => {
   const mockPrisma = buildPrismaMock();
@@ -146,16 +223,23 @@ test("processDueRecurringSupports scopes the atomic claim to active subscription
   );
 });
 
-test("processDueRecurringSupports does not create an execution when the claim is lost to a cancel or pause", async () => {
+test("processDueRecurringSupports does not persist an execution when the claim is lost to a cancel or pause", async () => {
   const mockPrisma = buildPrismaMock({ claimCount: 0 });
 
-  await processDueRecurringSupports(mockPrisma as any);
+  await processDueRecurringSupports(
+    mockPrisma as unknown as Parameters<typeof processDueRecurringSupports>[0],
+  );
 
+  // The insert is attempted before the atomic claim, inside the transaction...
   assert.equal(mockPrisma.$executeRaw.mock.callCount(), 1);
+  assert.equal(mockPrisma.recurringSupportExecution.create.mock.callCount(), 1);
+  // ...but the claim matches no active row, the transaction rolls back, and no
+  // execution row survives. Asserting on the mock's raw call count would pass
+  // even if rollback were broken, because a mock has no rollback semantics.
   assert.equal(
-    mockPrisma.recurringSupportExecution.create.mock.callCount(),
-    1,
-    "the execution is created inside the transaction before the claim",
+    mockPrisma.committedExecutions.length,
+    0,
+    "a rolled-back insert must not leave an execution behind",
   );
 });
 
@@ -223,8 +307,8 @@ test("processDueRecurringSupports continues processing after individual failure"
       findMany: mock.fn(() =>
         Promise.resolve([makeSupport({ id: "drip-1" }), makeSupport({ id: "drip-2" })]),
       ),
-      update: mock.fn(() => Promise.resolve({})),
-    },
+      update: mock.fn(() => Promise.resolve({}),
+    ),
     recurringSupportExecution: { create: executionCreate },
     $executeRaw,
     // The claim runs inside $transaction (see buildPrismaMock), so a mock that
@@ -242,17 +326,7 @@ test("processDueRecurringSupports continues processing after individual failure"
   assert.equal($executeRaw.mock.callCount(), 2);
 });
 
-test("processDueRecurringSupports filters for active status with due nextRunAt", async () => {
-  const mockPrisma = buildPrismaMock();
-
-  await processDueRecurringSupports(mockPrisma as any);
-
-  const findManyCall = getFirstArg<FindManyArg>(mockPrisma.recurringSupport.findMany);
-  assert.equal(findManyCall.where.status, "active");
-  assert.ok(findManyCall.where.nextRunAt.lte instanceof Date);
-});
-
-// ── Batch pagination tests (issue #654) ──────────────────────────────────────
+// ── Batch pagination tests (issue #654) ──
 
 test("processDueRecurringSupports uses take: 100 to limit each query", async () => {
   const mockPrisma = buildPrismaMock({ recurringSupports: [] });
@@ -306,7 +380,7 @@ test("processDueRecurringSupports queries again when a full batch of 100 is retu
   assert.equal($executeRaw.mock.callCount(), 100);
 });
 
-// ── Integration tests (real Postgres database) ──────────────────────────────
+// ── Integration tests (real Postgres database) ──
 
 test("processDueRecurringSupports integration: creates execution for due recurring support", async () => {
   const userId = await seedUser();
@@ -336,7 +410,6 @@ test("processDueRecurringSupports integration: creates execution for due recurri
 test("processDueRecurringSupports integration: advances nextRunAt correctly", async () => {
   const userId = await seedUser();
   const profileId = await seedProfile(userId);
-  const supporterId = await seedUser();
   const nextRunAt = new Date(Date.UTC(2024, 0, 15, 12, 0, 0));
 
   await seedRecurringSupport(profileId, supporterId, {
@@ -356,4 +429,253 @@ test("processDueRecurringSupports integration: advances nextRunAt correctly", as
   assert.equal(updated.nextRunAt.getTime(), expectedNext.getTime(), "nextRunAt should advance by 1 week");
 
   await cleanupTestData([profileId], [userId, supporterId]);
+});
+
+// ── Month-boundary regression test (issue #645) ──
+
+test("processDueRecurringSupports does not overflow into the wrong month at month-end boundaries", async () => {
+  const jan31 = new Date(Date.UTC(2024, 0, 31, 12, 0, 0));
+  const mockPrisma = buildPrismaMock({
+    recurringSupports: [makeSupport({ frequency: "monthly", nextRunAt: jan31 })],
+  });
+
+  await processDueRecurringSupports(mockPrisma as any, jan31);
+
+  const claimedNext = getRawValue(mockPrisma.$executeRaw, 1) as Date;
+  // Jan 31 + 1 month should clamp to Feb 29 (2024 is a leap year), not roll
+  // over into March as `setDate(getDate() + 30)` used to.
+  assert.equal(claimedNext.getUTCMonth(), 1, "should land in February, not March");
+  assert.equal(claimedNext.getUTCDate(), 29);
+});
+
+// ── Atomic-claim status guard tests (issue #1051) ──
+
+test("processDueRecurringSupports scopes the atomic claim to active subscriptions", async () => {
+  const mockPrisma = buildPrismaMock();
+
+  await processDueRecurringSupports(mockPrisma as any);
+
+  const sql = getRawSql(mockPrisma.$executeRaw);
+  assert.ok(
+    sql.includes(`"status" = 'active'`),
+    `atomic claim should be scoped to active subscriptions, got: ${sql}`,
+  );
+});
+
+// ── Issue #1351: deliveries stuck in "processing" are never reclaimed ──
+
+function buildReclaimPrismaMock(stuck: Array<{ id: string; attemptCount: number }>, counts: number[] = []) {
+  const findMany = mock.fn(() => Promise.resolve(stuck));
+  const updateMany = mock.fn(() => Promise.resolve({ count: counts.shift() ?? 1 }));
+  return {
+    prismaClient: { webhookDelivery: { findMany, updateMany } },
+    findMany,
+    updateMany,
+  };
+}
+
+test("a delivery stuck in processing is returned to pending so it can be retried", async () => {
+  const { prismaClient, updateMany } = buildReclaimPrismaMock([
+    { id: "stuck-1", attemptCount: 1 },
+  ]);
+  const now = new Date("2026-07-27T00:00:00Z");
+
+  const count = await reclaimStuckWebhookDeliveries(prismaClient as never, now, 60_000);
+
+  assert.equal(count, 1);
+  const [args] = updateMany.mock.calls[0]!.arguments as [
+    { where: { id: string; status: string; updatedAt: { lte: Date } }; data: { status: string; nextRetryAt: Date } },
+  ];
+  assert.equal(args.where.id, "stuck-1");
+  assert.equal(args.where.status, "processing");
+  assert.deepEqual(args.where.updatedAt.lte, new Date(now.getTime() - 60_000));
+  assert.equal(args.data.status, "pending");
+  assert.deepEqual(args.data.nextRetryAt, now);
+});
+
+test("only deliveries stuck past the threshold are selected", async () => {
+  const { prismaClient, findMany } = buildReclaimPrismaMock([]);
+  const now = new Date("2026-07-27T00:00:00Z");
+
+  await reclaimStuckWebhookDeliveries(prismaClient as never, now, 5 * 60 * 1000);
+
+  const [args] = findMany.mock.calls[0]!.arguments as [{ where: { status: string; updatedAt: { lte: Date } } }];
+  assert.equal(args.where.status, "processing");
+  assert.deepEqual(args.where.updatedAt.lte, new Date(now.getTime() - 5 * 60 * 1000));
+});
+
+test("a stuck delivery that has burned every attempt is failed, not retried", async () => {
+  const { prismaClient, updateMany } = buildReclaimPrismaMock([
+    { id: "stuck-exhausted", attemptCount: 3 },
+  ]);
+
+  const count = await reclaimStuckWebhookDeliveries(prismaClient as never, new Date(), 60_000);
+
+  assert.equal(count, 1);
+  const [args] = updateMany.mock.calls[0]!.arguments as [{ data: { status: string } }];
+  assert.equal(args.data.status, "failed");
+});
+
+test("nothing stuck means no writes at all", async () => {
+  const { prismaClient, updateMany } = buildReclaimPrismaMock([]);
+
+  const count = await reclaimStuckWebhookDeliveries(prismaClient as never, new Date(), 60_000);
+
+  assert.equal(count, 0);
+  assert.equal(updateMany.mock.calls.length, 0);
+});
+
+test("the processor sweep reclaims stuck deliveries before polling pending ones", async () => {
+  mock.timers.enable({ apis: ["setInterval"] });
+  try {
+    const order: string[] = [];
+    const handle = startWebhookProcessor({
+      redisAvailable: false,
+      intervalMs: 2,
+      reclaimStuck: async () => {
+        order.push("reclaim");
+        return 1;
+      },
+      processPending: async () => {
+        order.push("poll");
+      },
+    });
+
+    mock.timers.tick(2);
+    await handle.stop();
+
+    // Exactly one tick, so the ordering assertion cannot be diluted by a
+    // second sweep slipping into a real-time wait.
+    assert.deepEqual(order, ["reclaim", "poll"]);
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test("a failing reclaim is caught and does not crash the processor loop", async () => {
+  mock.timers.enable({ apis: ["setInterval"] });
+  try {
+    let polled = 0;
+    const handle = startWebhookProcessor({
+      redisAvailable: false,
+      intervalMs: 2,
+      reclaimStuck: async () => {
+        throw new Error("db down");
+      },
+      processPending: async () => {
+        polled += 1;
+      },
+    });
+
+    mock.timers.tick(2);
+    await handle.stop();
+
+    assert.equal(polled, 0, "this tick is skipped after a failed reclaim");
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+// ── issue #1351: deliveries stuck in "processing" are never reclaimed ──
+
+test("a delivery stuck in processing is returned to pending so it can be retried", async () => {
+  const { prismaClient, updateMany } = buildReclaimPrismaMock([
+    { id: "stuck-1", attemptCount: 1 },
+  ]);
+  const now = new Date("2026-07-27T00:00:00Z");
+
+  const count = await reclaimStuckWebhookDeliveries(prismaClient as never, now, 60_000);
+
+  assert.equal(count, 1);
+  const [args] = updateMany.mock.calls[0]!.arguments as [
+    { where: { id: string; status: string; updatedAt: { lte: Date } }; data: { status: string; nextRetryAt: Date } },
+  ];
+  assert.equal(args.where.id, "stuck-1");
+  assert.equal(args.where.status, "processing");
+  assert.deepEqual(args.where.updatedAt.lte, new Date(now.getTime() - 60_000));
+  assert.equal(args.data.status, "pending");
+  assert.deepEqual(args.data.nextRetryAt, now);
+});
+
+test("only deliveries stuck past the threshold are selected", async () => {
+  const { prismaClient, findMany } = buildReclaimPrismaMock([]);
+  const now = new Date("2026-07-27T00:00:00Z");
+
+  await reclaimStuckWebhookDeliveries(prismaClient as never, now, 5 * 60 * 1000);
+
+  const [args] = findMany.mock.calls[0]!.arguments as [{ where: { status: string; updatedAt: { lte: Date } } }];
+  assert.equal(args.where.status, "processing");
+  assert.deepEqual(args.where.updatedAt.lte, new Date(now.getTime() - 5 * 60 * 1000));
+});
+
+test("a stuck delivery that has burned every attempt is failed, not retried", async () => {
+  const { prismaClient, updateMany } = buildReclaimPrismaMock([
+    { id: "stuck-exhausted", attemptCount: 3 },
+  ]);
+
+  const count = await reclaimStuckWebhookDeliveries(prismaClient as never, new Date(), 60_000);
+
+  assert.equal(count, 1);
+  const [args] = updateMany.mock.calls[0]!.arguments as [{ data: { status: string } }];
+  assert.equal(args.data.status, "failed");
+});
+
+test("nothing stuck means no writes at all", async () => {
+  const { prismaClient, updateMany } = buildReclaimPrismaMock([]);
+
+  const count = await reclaimStuckWebhookDeliveries(prismaClient as never, new Date(), 60_000);
+
+  assert.equal(count, 0);
+  assert.equal(updateMany.mock.calls.length, 0);
+});
+
+test("the processor sweep reclaims stuck deliveries before polling pending ones", async () => {
+  mock.timers.enable({ apis: ["setInterval"] });
+  try {
+    const order: string[] = [];
+    const handle = startWebhookProcessor({
+      redisAvailable: false,
+      intervalMs: 2,
+      reclaimStuck: async () => {
+        order.push("reclaim");
+        return 1;
+      },
+      processPending: async () => {
+        order.push("poll");
+      },
+    });
+
+    mock.timers.tick(2);
+    await handle.stop();
+
+    // Exactly one tick, so the ordering assertion cannot be diluted by a
+    // second sweep slipping into a real-time wait.
+    assert.deepEqual(order, ["reclaim", "poll"]);
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test("a failing reclaim is caught and does not crash the processor loop", async () => {
+  mock.timers.enable({ apis: ["setInterval"] });
+  try {
+    let polled = 0;
+    const handle = startWebhookProcessor({
+      redisAvailable: false,
+      intervalMs: 2,
+      reclaimStuck: async () => {
+        throw new Error("db down");
+      },
+      processPending: async () => {
+        polled += 1;
+      },
+    });
+
+    mock.timers.tick(2);
+    await handle.stop();
+
+    assert.equal(polled, 0, "this tick is skipped after a failed reclaim");
+  } finally {
+    mock.timers.reset();
+  }
 });

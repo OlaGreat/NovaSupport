@@ -79,32 +79,40 @@ test("HTTP 500 keeps status pending and sets nextRetryAt to the backoff schedule
 });
 
 test("Redis mode still polls SQL so due webhook retries are delivered", async () => {
-  let queueStarted = false;
-  let workerStarted = false;
-  let pollCount = 0;
-  const handle = startWebhookProcessor({
-    redisAvailable: true,
-    intervalMs: 2,
-    startQueue: () => {
-      queueStarted = true;
-      return null;
-    },
-    startWorker: () => {
-      workerStarted = true;
-      return null;
-    },
-    reclaimStuck: async () => 0,
-    processPending: async () => {
-      pollCount += 1;
-    },
-  });
+  // Drive the interval deterministically instead of racing a real 15ms window
+  // that may contain zero or several ticks under CI load.
+  mock.timers.enable({ apis: ["setInterval"] });
+  try {
+    let queueStarted = false;
+    let workerStarted = false;
+    let pollCount = 0;
+    const handle = startWebhookProcessor({
+      redisAvailable: true,
+      intervalMs: 2,
+      startQueue: () => {
+        queueStarted = true;
+        return null;
+      },
+      startWorker: () => {
+        workerStarted = true;
+        return null;
+      },
+      reclaimStuck: async () => 0,
+      processPending: async () => {
+        pollCount += 1;
+      },
+    });
 
-  await new Promise((resolve) => setTimeout(resolve, 15));
-  await handle.stop();
+    // One interval period fires exactly one sweep; `stop()` awaits it.
+    mock.timers.tick(2);
+    await handle.stop();
 
-  assert.equal(queueStarted, true);
-  assert.equal(workerStarted, true);
-  assert.ok(pollCount > 0, "the SQL retry sweep should run while Redis is active");
+    assert.equal(queueStarted, true);
+    assert.equal(workerStarted, true);
+    assert.equal(pollCount, 1, "the SQL retry sweep should run while Redis is active");
+  } finally {
+    mock.timers.reset();
+  }
 });
 
 test("HTTP 4xx permanent failure sets status failed with no further retry scheduled", async () => {
@@ -192,7 +200,7 @@ test("a row already claimed by a concurrent run is skipped (no delivery attempte
   assert.equal(update.mock.calls.length, 0);
 });
 
-// ── issue #1351: deliveries stuck in "processing" are never reclaimed ─────────
+// ── issue #1351: deliveries stuck in "processing" are never reclaimed ──
 
 function buildReclaimPrismaMock(stuck: Array<{ id: string; attemptCount: number }>, counts: number[] = []) {
   const findMany = mock.fn(() => Promise.resolve(stuck));
@@ -256,42 +264,52 @@ test("nothing stuck means no writes at all", async () => {
 });
 
 test("the processor sweep reclaims stuck deliveries before polling pending ones", async () => {
-  const order: string[] = [];
-  const handle = startWebhookProcessor({
-    redisAvailable: false,
-    intervalMs: 2,
-    reclaimStuck: async () => {
-      order.push("reclaim");
-      return 1;
-    },
-    processPending: async () => {
-      order.push("poll");
-    },
-  });
+  mock.timers.enable({ apis: ["setInterval"] });
+  try {
+    const order: string[] = [];
+    const handle = startWebhookProcessor({
+      redisAvailable: false,
+      intervalMs: 2,
+      reclaimStuck: async () => {
+        order.push("reclaim");
+        return 1;
+      },
+      processPending: async () => {
+        order.push("poll");
+      },
+    });
 
-  await new Promise((resolve) => setTimeout(resolve, 15));
-  await handle.stop();
+    mock.timers.tick(2);
+    await handle.stop();
 
-  assert.ok(order.length >= 2, "the sweep should have run");
-  assert.equal(order[0], "reclaim");
-  assert.equal(order[1], "poll");
+    // Exactly one tick, so the ordering assertion cannot be diluted by a
+    // second sweep slipping into a real-time wait.
+    assert.deepEqual(order, ["reclaim", "poll"]);
+  } finally {
+    mock.timers.reset();
+  }
 });
 
 test("a failing reclaim is caught and does not crash the processor loop", async () => {
-  let polled = 0;
-  const handle = startWebhookProcessor({
-    redisAvailable: false,
-    intervalMs: 2,
-    reclaimStuck: async () => {
-      throw new Error("db down");
-    },
-    processPending: async () => {
-      polled += 1;
-    },
-  });
+  mock.timers.enable({ apis: ["setInterval"] });
+  try {
+    let polled = 0;
+    const handle = startWebhookProcessor({
+      redisAvailable: false,
+      intervalMs: 2,
+      reclaimStuck: async () => {
+        throw new Error("db down");
+      },
+      processPending: async () => {
+        polled += 1;
+      },
+    });
 
-  await new Promise((resolve) => setTimeout(resolve, 15));
-  await handle.stop();
+    mock.timers.tick(2);
+    await handle.stop();
 
-  assert.equal(polled, 0, "this tick is skipped after a failed reclaim");
+    assert.equal(polled, 0, "this tick is skipped after a failed reclaim");
+  } finally {
+    mock.timers.reset();
+  }
 });
