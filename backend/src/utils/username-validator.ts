@@ -68,7 +68,7 @@ const RESERVED_WORDS = new Set([
 // Common profanity and inappropriate words (basic filter)
 // This list includes common offensive words and their variations
 const PROFANITY_FILTER =
-  /\b(ass|asshole|bitch|bitches|crap|damn|dammit|dammits|damn|fart|farts|farted|farthed|farthing|farting|farts|gag|gags|gagged|gagging|god|goddam|goddamn|goddamned|goddamner|goddamners|goddamning|goddamns|goddamner|goddamners|goddamning|goddamns|godsdamn|godsake|hell|hells|hitter|hitters|horseshit|horseshits|jackass|jackasses|jerk|jerks|jerked|jerking|jerkings|jerks|motherfucker|motherfuckers|motherfucking|motherfuckings|piss|pissed|pisser|pissers|pisses|pissing|pissy|shit|shits|shitted|shitter|shitters|shitting|shittings|shitty|whore|whores|whored|whoring|suck|sucks|sucked|sucker|suckers|sucking|suckings|tit|tits|titted|titting|tittings|tittish|titty)\b/i;
+  /\b(ass|asshole|bitch|bitches|crap|damn|dammit|dammits|damn|fart|farts|farted|farthed|farthing|farting|farts|fuck|fucks|fucked|fucker|fuckers|fuckin|fucking|fuckings|gag|gags|gagged|gagging|god|goddam|goddamn|goddamned|goddamner|goddamners|goddamning|goddamns|goddamner|goddamners|goddamning|goddamns|godsdamn|godsake|hell|hells|hitter|hitters|horseshit|horseshits|jackass|jackasses|jerk|jerks|jerked|jerking|jerkings|jerks|motherfucker|motherfuckers|motherfucking|motherfuckings|piss|pissed|pisser|pissers|pisses|pissing|pissy|shit|shits|shitted|shitter|shitters|shitting|shittings|shitty|whore|whores|whored|whoring|suck|sucks|sucked|sucker|suckers|sucking|suckings|tit|tits|titted|titting|tittings|tittish|titty)\b/i;
 
 /**
  * Patterns that look confusing:
