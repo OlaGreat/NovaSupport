@@ -2,14 +2,27 @@
 
 echo "Running pre-push checks..."
 
-# Backend tests
-echo "→ Backend: Tests"
-cd backend && npm run test
-TEST_RESULT=$?
+# Frontend lint
+echo "→ Frontend: ESLint"
+cd frontend && npm run lint
+FRONTEND_RESULT=$?
 cd ..
 
-if [ $TEST_RESULT -ne 0 ]; then
-  echo "✗ Tests failed. Fix failing tests before pushing."
+# Backend type check
+echo "→ Backend: TypeScript check"
+cd backend && npx tsc --noEmit
+BACKEND_RESULT=$?
+cd ..
+
+# Backend tests
+echo "→ Backend: tests"
+cd backend && npm run test
+BACKEND_TEST_RESULT=$?
+cd ..
+
+# Fail if any check failed
+if [ $FRONTEND_RESULT -ne 0 ] || [ $BACKEND_RESULT -ne 0 ] || [ $BACKEND_TEST_RESULT -ne 0 ]; then
+  echo "✗ Pre-push checks failed. Fix the errors above before pushing."
   exit 1
 fi
 

@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-import { AppShell } from "./app-shell";
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -33,8 +32,14 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   render(): React.ReactNode {
     if (this.state.hasError) {
       return (
-        <AppShell>
-          <div className="flex min-h-[60vh] flex-col items-center justify-center gap-6 px-4">
+        // Deliberately self-contained: no AppShell, no other app component.
+        // AppShell renders *inside* this boundary, so it is one of the things
+        // that can throw. Re-mounting it here would throw a second time with
+        // no ancestor boundary left to catch it, blanking the page instead of
+        // degrading to this fallback (#1062). The chrome below mirrors
+        // AppShell's outer <main> so the fallback still looks like a page.
+        <main className="min-h-screen px-6 py-8 sm:px-10 bg-ink dark:bg-black transition-colors">
+          <div className="mx-auto flex min-h-[60vh] max-w-6xl flex-col items-center justify-center gap-6 px-4">
             <div className="rounded-full bg-red-500/10 p-6">
               <svg
                 className="h-16 w-16 text-red-500"
@@ -81,7 +86,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
               </button>
             </div>
           </div>
-        </AppShell>
+        </main>
       );
     }
 

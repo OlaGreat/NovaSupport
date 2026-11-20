@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface UseInfiniteScrollOptions {
   onLoadMore: () => void;
@@ -13,39 +13,42 @@ export function useInfiniteScroll({
   isLoading,
   threshold = 0.8,
 }: UseInfiniteScrollOptions) {
-  const observerRef = useRef<IntersectionObserver | null>(null);
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  // Keep a ref to the latest values so the observer callback always sees
+  // current state without being recreated on every change.
+  const stateRef = useRef({ hasMore, isLoading, onLoadMore });
+  stateRef.current = { hasMore, isLoading, onLoadMore };
 
-  const handleIntersection = useCallback(
-    (entries: IntersectionObserverEntry[]) => {
-      const [entry] = entries;
-      if (entry.isIntersecting && hasMore && !isLoading) {
-        onLoadMore();
-      }
-    },
-    [hasMore, isLoading, onLoadMore]
-  );
+  // The sentinel is kept in state so the observer effect re-runs when it
+  // mounts or unmounts, including when it sits behind a conditional
+  // (e.g. "hasMore && profiles.length > 0").
+  //
+  // This is not a ref callback that returns a cleanup: React 18 ignores the
+  // return value of ref callbacks, so the observer would never disconnect.
+  const [sentinel, setSentinel] = useState<HTMLDivElement | null>(null);
+  const sentinelRef = useCallback((node: HTMLDivElement | null) => {
+    setSentinel(node);
+  }, []);
 
   useEffect(() => {
-    const options = {
-      root: null,
-      rootMargin: "0px",
-      threshold,
-    };
+    if (!sentinel) return;
 
-    observerRef.current = new IntersectionObserver(handleIntersection, options);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (
+          entry.isIntersecting &&
+          stateRef.current.hasMore &&
+          !stateRef.current.isLoading
+        ) {
+          stateRef.current.onLoadMore();
+        }
+      },
+      { root: null, rootMargin: "0px", threshold }
+    );
 
-    const currentSentinel = sentinelRef.current;
-    if (currentSentinel) {
-      observerRef.current.observe(currentSentinel);
-    }
-
-    return () => {
-      if (observerRef.current && currentSentinel) {
-        observerRef.current.unobserve(currentSentinel);
-      }
-    };
-  }, [handleIntersection, threshold]);
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [sentinel, threshold]);
 
   return sentinelRef;
 }

@@ -435,6 +435,84 @@ exports[`Component Snapshots > QRCodeButton matches snapshot 1`] = `
 </div>
 `;
 
+exports[`Component Snapshots > QRCodeButton matches snapshot 1`] = `
+<div>
+  <div
+    class="relative"
+  >
+    <button
+      aria-label="Show QR code"
+      class="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-sky/80 transition hover:bg-white/10 hover:text-white"
+      type="button"
+    >
+      <svg
+        aria-hidden="true"
+        class="lucide lucide-qr-code"
+        fill="none"
+        height="14"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        width="14"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <rect
+          height="5"
+          rx="1"
+          width="5"
+          x="3"
+          y="3"
+        />
+        <rect
+          height="5"
+          rx="1"
+          width="5"
+          x="16"
+          y="3"
+        />
+        <rect
+          height="5"
+          rx="1"
+          width="5"
+          x="3"
+          y="16"
+        />
+        <path
+          d="M21 16h-3a2 2 0 0 0-2 2v3"
+        />
+        <path
+          d="M21 21v.01"
+        />
+        <path
+          d="M12 7v3a2 2 0 0 1-2 2H7"
+        />
+        <path
+          d="M3 12h.01"
+        />
+        <path
+          d="M12 3h.01"
+        />
+        <path
+          d="M12 16v.01"
+        />
+        <path
+          d="M16 12h1"
+        />
+        <path
+          d="M21 12v.01"
+        />
+        <path
+          d="M12 21v-1"
+        />
+      </svg>
+      QR Code
+    </button>
+  </div>
+</div>
+`;
+
 exports[`Component Snapshots > Skeleton matches snapshot 1`] = `
 <div>
   <div
@@ -448,11 +526,13 @@ exports[`Component Snapshots > Toast matches snapshot (error) 1`] = `
   <div
     class="fixed bottom-4 right-4 px-4 py-3 rounded shadow-lg text-white
       bg-red-600"
+    role="status"
   >
     <span>
       Error!
     </span>
     <button
+      aria-label="Dismiss"
       class="ml-4 font-bold"
     >
       ×
@@ -466,11 +546,13 @@ exports[`Component Snapshots > Toast matches snapshot (success) 1`] = `
   <div
     class="fixed bottom-4 right-4 px-4 py-3 rounded shadow-lg text-white
       bg-green-600"
+    role="status"
   >
     <span>
       Success!
     </span>
     <button
+      aria-label="Dismiss"
       class="ml-4 font-bold"
     >
       ×

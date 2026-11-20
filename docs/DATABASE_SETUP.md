@@ -1,4 +1,4 @@
-`# Database Setup
+# Database Setup
 
 ## Create A Supabase Project
 
@@ -18,7 +18,7 @@ For NovaSupport, use the placeholders from `backend/.env.example` and replace th
 Example direct connection:
 
 ```env
-DIRECT_URL=postgresql://postgres:[YOUR-PASSWORD]@db.crnsvgljoopphjnmcawu.supabase.co:5432/postgres
+DIRECT_URL=postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-SUPABASE-PROJECT-REF].supabase.co:5432/postgres
 ```
 
 `DATABASE_URL` can point to your pooled or normal connection string depending on your Supabase setup. Keep both values in `backend/.env`.

@@ -3,10 +3,11 @@
 exports[`EmptyState > renders default variant 1`] = `
 <div>
   <div
-    class="flex flex-col items-center justify-center px-4 py-12"
+    class="flex flex-col items-center justify-center px-6 py-16 text-center border border-dashed border-gray-200 dark:border-white/10 rounded-3xl bg-gray-50/50 dark:bg-white/[0.02]"
   >
     <svg
-      class="mx-auto mb-4 h-16 w-16 text-gray-300 dark:text-gray-600"
+      aria-hidden="true"
+      class="mx-auto mb-6 h-20 w-20 text-gray-300 dark:text-gray-600/80 transition-colors"
       fill="none"
       stroke="currentColor"
       viewBox="0 0 24 24"
@@ -15,16 +16,16 @@ exports[`EmptyState > renders default variant 1`] = `
         d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
         stroke-linecap="round"
         stroke-linejoin="round"
-        stroke-width="1.5"
+        stroke-width="1.2"
       />
     </svg>
     <h3
-      class="mt-4 text-center text-lg font-semibold text-gray-900 dark:text-white"
+      class="mt-4 text-xl font-semibold text-gray-900 dark:text-white tracking-tight"
     >
       No data
     </h3>
     <p
-      class="mt-2 max-w-sm text-center text-sm text-gray-500 dark:text-gray-400"
+      class="mt-3 max-w-md text-sm text-gray-500 dark:text-sky/60"
     >
       There is no data to display
     </p>
@@ -32,13 +33,14 @@ exports[`EmptyState > renders default variant 1`] = `
 </div>
 `;
 
-exports[`EmptyState > renders explore variant 1`] = `
+exports[`EmptyState > renders no-results variant 1`] = `
 <div>
   <div
-    class="flex flex-col items-center justify-center px-4 py-12"
+    class="flex flex-col items-center justify-center px-6 py-16 text-center border border-dashed border-gray-200 dark:border-white/10 rounded-3xl bg-gray-50/50 dark:bg-white/[0.02]"
   >
     <svg
-      class="mx-auto mb-4 h-16 w-16 text-gray-300 dark:text-gray-600"
+      aria-hidden="true"
+      class="mx-auto mb-6 h-20 w-20 text-gray-300 dark:text-gray-600/80 transition-colors"
       fill="none"
       stroke="currentColor"
       viewBox="0 0 24 24"
@@ -47,16 +49,16 @@ exports[`EmptyState > renders explore variant 1`] = `
         d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
         stroke-linecap="round"
         stroke-linejoin="round"
-        stroke-width="1.5"
+        stroke-width="1.2"
       />
     </svg>
     <h3
-      class="mt-4 text-center text-lg font-semibold text-gray-900 dark:text-white"
+      class="mt-4 text-xl font-semibold text-gray-900 dark:text-white tracking-tight"
     >
       No creators found
     </h3>
     <p
-      class="mt-2 max-w-sm text-center text-sm text-gray-500 dark:text-gray-400"
+      class="mt-3 max-w-md text-sm text-gray-500 dark:text-sky/60"
     >
       Try adjusting your search or check back later.
     </p>
@@ -64,31 +66,32 @@ exports[`EmptyState > renders explore variant 1`] = `
 </div>
 `;
 
-exports[`EmptyState > renders supporters variant 1`] = `
+exports[`EmptyState > renders no-supporters variant 1`] = `
 <div>
   <div
-    class="flex flex-col items-center justify-center px-4 py-12"
+    class="flex flex-col items-center justify-center px-6 py-16 text-center border border-dashed border-gray-200 dark:border-white/10 rounded-3xl bg-gray-50/50 dark:bg-white/[0.02]"
   >
     <svg
-      class="mx-auto mb-4 h-16 w-16 text-gray-300 dark:text-gray-600"
+      aria-hidden="true"
+      class="mx-auto mb-6 h-20 w-20 text-gray-300 dark:text-gray-600/80 transition-colors"
       fill="none"
       stroke="currentColor"
       viewBox="0 0 24 24"
     >
       <path
-        d="M17 20h5v-2a3 3 0 00-5.856-1.487M15 10a3 3 0 11-6 0 3 3 0 016 0zM6 20h12a6 6 0 00-6-6 6 6 0 00-6 6z"
+        d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
         stroke-linecap="round"
         stroke-linejoin="round"
-        stroke-width="1.5"
+        stroke-width="1.2"
       />
     </svg>
     <h3
-      class="mt-4 text-center text-lg font-semibold text-gray-900 dark:text-white"
+      class="mt-4 text-xl font-semibold text-gray-900 dark:text-white tracking-tight"
     >
       Be the first to support!
     </h3>
     <p
-      class="mt-2 max-w-sm text-center text-sm text-gray-500 dark:text-gray-400"
+      class="mt-3 max-w-md text-sm text-gray-500 dark:text-sky/60"
     >
       This profile hasn't received support yet.
     </p>
@@ -96,31 +99,32 @@ exports[`EmptyState > renders supporters variant 1`] = `
 </div>
 `;
 
-exports[`EmptyState > renders transactions variant 1`] = `
+exports[`EmptyState > renders no-transactions variant 1`] = `
 <div>
   <div
-    class="flex flex-col items-center justify-center px-4 py-12"
+    class="flex flex-col items-center justify-center px-6 py-16 text-center border border-dashed border-gray-200 dark:border-white/10 rounded-3xl bg-gray-50/50 dark:bg-white/[0.02]"
   >
     <svg
-      class="mx-auto mb-4 h-16 w-16 text-gray-300 dark:text-gray-600"
+      aria-hidden="true"
+      class="mx-auto mb-6 h-20 w-20 text-gray-300 dark:text-gray-600/80 transition-colors"
       fill="none"
       stroke="currentColor"
       viewBox="0 0 24 24"
     >
       <path
-        d="M13 16h-1v-4h-1m1-4h.01M21 12A9 9 0 1111 3a9 9 0 0110 9z"
+        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
         stroke-linecap="round"
         stroke-linejoin="round"
-        stroke-width="1.5"
+        stroke-width="1.2"
       />
     </svg>
     <h3
-      class="mt-4 text-center text-lg font-semibold text-gray-900 dark:text-white"
+      class="mt-4 text-xl font-semibold text-gray-900 dark:text-white tracking-tight"
     >
       No transactions yet
     </h3>
     <p
-      class="mt-2 max-w-sm text-center text-sm text-gray-500 dark:text-gray-400"
+      class="mt-3 max-w-md text-sm text-gray-500 dark:text-sky/60"
     >
       Transactions will appear here once supporters send funds.
     </p>
@@ -128,13 +132,14 @@ exports[`EmptyState > renders transactions variant 1`] = `
 </div>
 `;
 
-exports[`EmptyState > renders with action button 1`] = `
+exports[`EmptyState > renders with a call-to-action link 1`] = `
 <div>
   <div
-    class="flex flex-col items-center justify-center px-4 py-12"
+    class="flex flex-col items-center justify-center px-6 py-16 text-center border border-dashed border-gray-200 dark:border-white/10 rounded-3xl bg-gray-50/50 dark:bg-white/[0.02]"
   >
     <svg
-      class="mx-auto mb-4 h-16 w-16 text-gray-300 dark:text-gray-600"
+      aria-hidden="true"
+      class="mx-auto mb-6 h-20 w-20 text-gray-300 dark:text-gray-600/80 transition-colors"
       fill="none"
       stroke="currentColor"
       viewBox="0 0 24 24"
@@ -143,24 +148,25 @@ exports[`EmptyState > renders with action button 1`] = `
         d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
         stroke-linecap="round"
         stroke-linejoin="round"
-        stroke-width="1.5"
+        stroke-width="1.2"
       />
     </svg>
     <h3
-      class="mt-4 text-center text-lg font-semibold text-gray-900 dark:text-white"
+      class="mt-4 text-xl font-semibold text-gray-900 dark:text-white tracking-tight"
     >
       No results
     </h3>
     <p
-      class="mt-2 max-w-sm text-center text-sm text-gray-500 dark:text-gray-400"
+      class="mt-3 max-w-md text-sm text-gray-500 dark:text-sky/60"
     >
       Try adjusting your search
     </p>
-    <button
-      class="mt-6 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 px-4 py-2 text-white transition-shadow hover:shadow-lg"
+    <a
+      class="mt-8 inline-flex items-center justify-center rounded-full bg-mint px-6 py-3 text-sm font-semibold text-ink transition-transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-mint focus:ring-offset-2 dark:focus:ring-offset-ocean"
+      href="/explore"
     >
       Clear Search
-    </button>
+    </a>
   </div>
 </div>
 `;

@@ -27,20 +27,22 @@ describe('ProfileTabs', () => {
 
     render(<ProfileTabs username="stellar-dev" />);
 
-    expect(await screen.findByText('No support yet')).toBeInTheDocument();
+    expect(await screen.findByText('No transactions yet')).toBeInTheDocument();
     expect(
-      await screen.findByText('Be the first to support stellar-dev!')
+      await screen.findByText('Be the first to support this creator!')
     ).toBeInTheDocument();
   });
 
-  it('personalises the empty state with the username', async () => {
+  it('shows the same empty-state copy regardless of username', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       json: async () => ({ transactions: [] }),
     }));
 
     render(<ProfileTabs username="alice" />);
 
-    expect(await screen.findByText('Be the first to support alice!')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Be the first to support this creator!')
+    ).toBeInTheDocument();
   });
 
   it('renders transaction list when transactions exist', async () => {
@@ -128,7 +130,7 @@ describe('ProfileTabs', () => {
     expect(unknownBadge).toHaveClass('bg-gray-100', 'text-gray-800');
   });
 
-  it('renders badges coming soon empty state', () => {
+  it('renders the badges empty state', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       json: async () => ({ transactions: [] }),
     }));
@@ -139,7 +141,9 @@ describe('ProfileTabs', () => {
     const badgesTab = screen.getByText('Badges');
     fireEvent.click(badgesTab);
 
-    expect(screen.getByText('Badges coming soon')).toBeInTheDocument();
-    expect(screen.getByText('Achievement badges will appear here once earned.')).toBeInTheDocument();
+    expect(await screen.findByText('No badges yet')).toBeInTheDocument();
+    expect(
+      screen.getByText('Achievement badges will appear here once earned.')
+    ).toBeInTheDocument();
   });
 });

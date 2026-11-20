@@ -75,6 +75,17 @@ type SupporterData = {
   recentTransactions?: SupportTransaction[];
 };
 
+function emptySupporterData(address: string): SupporterData {
+  return {
+    address,
+    totalTransactions: 0,
+    profilesSupported: 0,
+    totalByAsset: [],
+    supportedProfiles: [],
+    transactions: [],
+  };
+}
+
 async function getSupporterData(address: string): Promise<SupporterData | null> {
   const res = await fetch(`${API_BASE_URL}/supporters/${address}`, {
     next: { revalidate: 60 },
@@ -82,6 +93,12 @@ async function getSupporterData(address: string): Promise<SupporterData | null> 
 
   if (res.status === 400) {
     notFound();
+  }
+
+  // A valid address with no support history is not an error — render the
+  // friendly zero-transaction empty state instead of "Supporter unavailable".
+  if (res.status === 404) {
+    return emptySupporterData(address);
   }
 
   if (!res.ok) {
@@ -98,6 +115,10 @@ function truncateAddress(address: string): string {
 function normalizeAssetTotals(
   totals: SupporterData["totalByAsset"],
 ): AssetTotal[] {
+  if (totals == null) {
+    return [];
+  }
+
   if (Array.isArray(totals)) {
     return totals;
   }
@@ -154,19 +175,21 @@ export default async function SupporterPage({ params }: PageProps) {
   const transactions = data.transactions ?? data.recentTransactions ?? [];
   const supportedProfiles =
     data.supportedProfiles ??
-    Array.from(
-      transactions
-        .reduce((profiles, tx) => {
-          const existing = profiles.get(tx.profileUsername);
-          profiles.set(tx.profileUsername, {
-            username: tx.profileUsername,
-            displayName: tx.profileDisplayName,
-            totalTransactions: (existing?.totalTransactions ?? 0) + 1,
-          });
-          return profiles;
-        }, new Map<string, SupportedProfile>())
-        .values(),
-    );
+    (data.transactions
+      ? Array.from(
+          data.transactions
+            .reduce((profiles, tx) => {
+              const existing = profiles.get(tx.profileUsername);
+              profiles.set(tx.profileUsername, {
+                username: tx.profileUsername,
+                displayName: tx.profileDisplayName,
+                totalTransactions: (existing?.totalTransactions ?? 0) + 1,
+              });
+              return profiles;
+            }, new Map<string, SupportedProfile>())
+            .values(),
+        )
+      : []);
   const shareUrl = `/supporters/${address}`;
   const shareHref = `https://twitter.com/intent/tweet?text=${encodeURIComponent(
     `View this NovaSupport supporter profile: ${shareUrl}`,

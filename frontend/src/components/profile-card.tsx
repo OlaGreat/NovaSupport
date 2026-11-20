@@ -1,12 +1,15 @@
 "use client";
-import { useState, useCallback, KeyboardEvent } from "react";
+import { useState, useEffect, useCallback, KeyboardEvent } from "react";
 import Image from "next/image";
 import { isValidStellarAddress, stellarExpertUrl } from "@/lib/stellar";
 import { useToast } from "@/lib/use-toast";
-import { SITE_URL } from "@/lib/config";
+import { API_BASE_URL, SITE_URL } from "@/lib/config";
 import { apiFetch } from "@/lib/api-client";
+import { getStoredWalletAddress } from "@/lib/wallet-adapters";
+import { QrCode } from "lucide-react";
 
 import { ProfileCardSkeleton } from "./skeleton";
+import { QRModal } from "./qr-modal";
 
 type Asset = {
   code: string;
@@ -51,20 +54,46 @@ export function ProfileCard({
 }: ProfileCardProps & { isVerified?: boolean }) {
   const [copied, setCopied] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [showQR, setShowQR] = useState(false);
   const [resending, setResending] = useState(false);
   const [resendSent, setResendSent] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
   const { showToast } = useToast();
+
+  // Re-evaluate ownership whenever the connected wallet changes so a mid-session
+  // connect/disconnect updates the UI without a reload (#1449). WalletConnect
+  // dispatches wallet-connected / wallet-disconnected in this tab; `storage`
+  // covers changes made from other tabs.
+  useEffect(() => {
+    function syncOwnership() {
+      const storedAddress = getStoredWalletAddress();
+      setIsOwner(Boolean(storedAddress && storedAddress === walletAddress));
+    }
+
+    function handleStorage(event: StorageEvent) {
+      if (event.key === null || event.key === "walletAddress") {
+        syncOwnership();
+      }
+    }
+
+    syncOwnership();
+    window.addEventListener("wallet-connected", syncOwnership);
+    window.addEventListener("wallet-disconnected", syncOwnership);
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener("wallet-connected", syncOwnership);
+      window.removeEventListener("wallet-disconnected", syncOwnership);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, [walletAddress]);
 
   const isValid = isValidStellarAddress(walletAddress);
   const hasSocialLinks = email || websiteUrl || twitterHandle || githubHandle;
 
-  const currentWallet = typeof window !== 'undefined' ? localStorage.getItem('walletAddress') : null;
-  const isOwner = currentWallet === walletAddress;
-
   const handleResend = async () => {
     setResending(true);
     try {
-      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/profiles/${username}/resend-verification-email`, {
+      const res = await apiFetch(`${API_BASE_URL}/profiles/${username}/resend-verification-email`, {
         method: "POST",
       });
       const data = await res.json();
@@ -250,7 +279,15 @@ export function ProfileCard({
               >
                 𝕏 Share on X
               </a>
+              <button
+                onClick={() => setShowQR(true)}
+                className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-medium text-white hover:bg-white/10 transition-colors flex items-center gap-1.5"
+                aria-label="Show QR code"
+              >
+                <QrCode size={13} /> QR Code
+              </button>
             </div>
+            {showQR && <QRModal url={profileUrl} onClose={() => setShowQR(false)} />}
 
             {hasSocialLinks && (
               <div className="mt-4 flex flex-wrap gap-3">
@@ -294,16 +331,27 @@ export function ProfileCard({
         <div className="w-full sm:w-auto mt-4 sm:mt-0 rounded-3xl border border-mint/20 bg-ink/50 px-4 py-3 text-sm text-sky/80">
           <p className="font-semibold text-white">Stellar Wallet</p>
           <div className="mt-2 flex items-center">
-            <a
-              href={expertUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              onKeyDown={handleKeyDown}
-              aria-label={`Stellar wallet address: ${walletAddress}. Press Ctrl+C to copy.`}
-              className="text-xs text-indigo-500 hover:underline font-mono break-all flex-1 focus:outline-none focus:ring-1 focus:ring-mint/50 rounded"
-            >
-              {walletAddress}
-            </a>
+            {isValid ? (
+              <a
+                href={expertUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onKeyDown={handleKeyDown}
+                aria-label={`Stellar wallet address: ${walletAddress}. Press Ctrl+C to copy.`}
+                className="text-xs text-indigo-500 hover:underline font-mono break-all flex-1 focus:outline-none focus:ring-1 focus:ring-mint/50 rounded"
+              >
+                {walletAddress}
+              </a>
+            ) : (
+              <span
+                onKeyDown={handleKeyDown}
+                aria-label={`Stellar wallet address: ${walletAddress}. Press Ctrl+C to copy.`}
+                className="text-xs text-gold/80 font-mono break-all flex-1 focus:outline-none focus:ring-1 focus:ring-mint/50 rounded"
+                tabIndex={0}
+              >
+                {walletAddress}
+              </span>
+            )}
             <button 
               onClick={handleCopy} 
               aria-label="Copy wallet address to clipboard"
@@ -339,7 +387,15 @@ export function ProfileCard({
               className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-sky/80"
             >
               <span className="font-semibold text-white">{asset.code}</span>
-              {asset.issuer ? <span className="ml-2 text-xs">{asset.issuer}</span> : <span className="ml-2 text-xs">native</span>}
+              {asset.issuer ? (
+                <span className="ml-2 text-xs" title={asset.issuer}>
+                  {asset.issuer.length > 10
+                    ? `${asset.issuer.slice(0, 4)}…${asset.issuer.slice(-4)}`
+                    : asset.issuer}
+                </span>
+              ) : (
+                <span className="ml-2 text-xs">native</span>
+              )}
             </div>
           ))}
         </div>

@@ -1,0 +1,19 @@
+# Global default maintainer
+* @OlaGreat
+
+# CI/CD Workflows
+/.github/workflows/ @OlaGreat
+
+# Smart Contract
+/contract/ @OlaGreat
+
+# Security-sensitive backend paths
+/backend/src/auth.ts @OlaGreat
+/backend/src/services/verify-transaction.ts @OlaGreat
+/backend/src/middleware/ @OlaGreat
+/backend/src/db.ts @OlaGreat
+/backend/prisma/ @OlaGreat
+
+# Security policies
+/SECURITY.md @OlaGreat
+/contract/SECURITY.md @OlaGreat

@@ -325,7 +325,10 @@ async function main() {
           },
         });
 
-        const res = await fetch(`${srv.baseUrl}/analytics/${username}`);
+        const token = signJWT(walletAddress, ownerId);
+        const res = await fetch(`${srv.baseUrl}/analytics/${username}`, {
+          headers: { authorization: `Bearer ${token}` },
+        });
         assert.equal(res.status, 200, `Expected 200, got ${res.status}`);
 
         const body = (await res.json()) as any;
@@ -353,10 +356,23 @@ async function main() {
   if (!hasDb) {
     console.log("SKIP GET /analytics/:campaignId → 404 if profile not found (no DATABASE_URL)");
   } else {
-    await runTest("GET /analytics/:campaignId → 404 if profile not found", async () => {
+    await runTest("GET /analytics/:campaignId → 401 without auth token", async () => {
       const srv = await startTestServer(makeLogStream().stream);
       try {
         const res = await fetch(`${srv.baseUrl}/analytics/non-existent-user`);
+        assert.equal(res.status, 401, `Expected 401, got ${res.status}`);
+      } finally {
+        await srv.close();
+      }
+    });
+
+    await runTest("GET /analytics/:campaignId → 404 if profile not found", async () => {
+      const srv = await startTestServer(makeLogStream().stream);
+      try {
+        const token = signJWT(walletAddress, "fake-user-id");
+        const res = await fetch(`${srv.baseUrl}/analytics/non-existent-user`, {
+          headers: { authorization: `Bearer ${token}` },
+        });
         assert.equal(res.status, 404, `Expected 404, got ${res.status}`);
       } finally {
         await srv.close();

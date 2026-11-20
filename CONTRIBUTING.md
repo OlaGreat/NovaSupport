@@ -151,11 +151,11 @@ The Docker container uses these default credentials (matching `backend/.env.exam
 
 All pull requests must pass the following CI status checks before merging to `main`:
 
-- **Frontend CI** — installs dependencies, runs tests, and builds the Next.js app (`npm run build`)
-- **Backend CI** — generates the Prisma client, applies migrations, runs backend tests (`npm run test`), and compiles TypeScript (`npm run build`)
-- **Contract CI** — builds the contract for native and WASM targets (`cargo build --release`) and runs contract tests (`cargo test`)
+- **Frontend CI** — installs dependencies, runs tests (`npm test`), runs lint, and builds the Next.js app (`npm run build`)
+- **Backend CI** — generates the Prisma client, applies migrations, runs lint (`npm run lint`), runs backend tests (`npm run test`), and compiles TypeScript (`npm run build`)
+- **Contract CI** — runs contract tests (`cargo test`) and builds the contract for the WASM target (`cargo build --target wasm32-unknown-unknown --release`)
 
-Each workflow runs on `pull_request` events for its respective directory and on `push` to `main`. Frontend CI and Backend CI test against Node.js 18.x and 20.x.
+Each workflow runs on `pull_request` events for its respective directory and on `push` to `main`. The contract deploy workflow is triggered manually via `workflow_dispatch`.
 
 ### Setting Up Branch Protection (Maintainers)
 
@@ -164,10 +164,8 @@ Each workflow runs on `pull_request` events for its respective directory and on 
 3. Set the target branch to `main`
 4. Enable **Require status checks to pass before merging**
 5. Add the following required status checks:
-   - `Test and build (Node.js 18.x)` (Frontend CI)
-   - `Test and build (Node.js 20.x)` (Frontend CI)
-   - `Backend checks (Node 18.x)` (Backend CI)
-   - `Backend checks (Node 20.x)` (Backend CI)
+   - `Frontend checks` (Frontend CI)
+   - `Backend checks` (Backend CI)
    - `Contract checks` (Contract CI)
 6. Enable **Require a pull request before merging**
 7. Optionally enable **Require conversation resolution before merging**

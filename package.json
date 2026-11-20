@@ -2,17 +2,16 @@
   "name": "novasupport",
   "version": "1.0.0",
   "description": "NovaSupport is a Stellar-native support platform for open-source maintainers, creators, and developers who want to receive community funding directly on Stellar. The MVP centers on public creator profiles, wallet-ready support flows, and clear onchain intent using Stellar Testnet, Freighter, Horizon, and Soroban.",
-  "main": "index.js",
   "directories": {
     "doc": "docs"
   },
   "scripts": {
     "prepare": "husky",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "npm run test --workspace=frontend && npm run test --workspace=backend"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "devDependencies": {
     "husky": "^9.1.7"
   }

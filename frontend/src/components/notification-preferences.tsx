@@ -28,12 +28,8 @@ export function NotificationPreferences({ username }: Props) {
   const [emailVerified, setEmailVerified] = useState<boolean | null>(null);
 
   useEffect(() => {
-    const token = localStorage.getItem("authToken");
-    if (!token) {
-      setLoading(false);
-      return;
-    }
-
+    setLoading(true);
+    setError(null);
     Promise.all([
       apiFetch(`${API_BASE_URL}/profiles/${username}/notification-preferences`),
       apiFetch(`${API_BASE_URL}/profiles/${username}`),
@@ -48,7 +44,9 @@ export function NotificationPreferences({ username }: Props) {
         if (prefsData) setPrefs(prefsData);
         if (profileData) setEmailVerified(profileData.emailVerified ?? false);
       })
-      .catch(() => {})
+      .catch(() => {
+        setError("Failed to load notification preferences");
+      })
       .finally(() => setLoading(false));
   }, [username]);
 
@@ -89,7 +87,24 @@ export function NotificationPreferences({ username }: Props) {
     [prefs, username],
   );
 
-  if (loading) return null;
+  if (loading) {
+    return (
+      <section className="rounded-2xl border border-white/10 bg-white/5 p-6 space-y-4">
+        <div className="h-4 w-48 rounded bg-white/10 animate-pulse" />
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
+              <div className="space-y-1.5">
+                <div className="h-3.5 w-32 rounded bg-white/10 animate-pulse" />
+                <div className="h-2.5 w-56 rounded bg-white/5 animate-pulse" />
+              </div>
+              <div className="h-5 w-9 rounded-full bg-white/10 animate-pulse" />
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  }
 
   const toggleClass = (on: boolean) =>
     `relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
@@ -171,7 +186,7 @@ function PreferenceRow({
   knobClass: (on: boolean) => string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
+    <label className="flex items-center justify-between gap-4 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3 cursor-pointer">
       <div className="min-w-0">
         <p className="text-sm font-medium text-white">{label}</p>
         <p className="text-xs text-white/40 mt-0.5">{description}</p>
@@ -184,8 +199,10 @@ function PreferenceRow({
           </span>
         )}
         <button
+          type="button"
           role="switch"
           aria-checked={checked}
+          aria-label={label}
           onClick={onToggle}
           disabled={saving}
           className={toggleClass(checked)}
@@ -193,6 +210,6 @@ function PreferenceRow({
           <span className={knobClass(checked)} />
         </button>
       </div>
-    </div>
+    </label>
   );
 }

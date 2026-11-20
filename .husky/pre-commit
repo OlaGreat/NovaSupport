@@ -14,8 +14,14 @@ cd backend && npx tsc --noEmit
 BACKEND_RESULT=$?
 cd ..
 
-# Fail if either check failed
-if [ $FRONTEND_RESULT -ne 0 ] || [ $BACKEND_RESULT -ne 0 ]; then
+# Backend tests
+echo "→ Backend: tests"
+cd backend && npm run test
+BACKEND_TEST_RESULT=$?
+cd ..
+
+# Fail if any check failed
+if [ $FRONTEND_RESULT -ne 0 ] || [ $BACKEND_RESULT -ne 0 ] || [ $BACKEND_TEST_RESULT -ne 0 ]; then
   echo "✗ Pre-commit checks failed. Fix the errors above before committing."
   exit 1
 fi

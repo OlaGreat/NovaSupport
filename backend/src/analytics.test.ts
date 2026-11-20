@@ -294,27 +294,38 @@ describe("Analytics Tests", () => {
     it("should cache analytics results", async () => {
       clearAnalyticsCache(testProfileId);
 
-      const start = Date.now();
       const analytics1 = await getAnalytics(
         testProfileId,
         new Date("2025-01-01"),
         new Date("2025-01-05"),
       );
-      const time1 = Date.now() - start;
 
-      const start2 = Date.now();
+      const originalTotal = analytics1.summary.totalRaised;
+
+      // Mutate the underlying data
+      await prisma.supportTransaction.create({
+        data: {
+          txHash: `test-tx-new-${Date.now()}`,
+          amount: "999",
+          assetCode: "XLM",
+          status: "SUCCESS",
+          stellarNetwork: "TESTNET",
+          recipientAddress: "GTEST" + "A".repeat(51),
+          supporterAddress: "SUPPNEW" + "A".repeat(47),
+          profileId: testProfileId,
+          createdAt: new Date("2025-01-01"),
+        },
+      });
+
       const analytics2 = await getAnalytics(
         testProfileId,
         new Date("2025-01-01"),
         new Date("2025-01-05"),
       );
-      const time2 = Date.now() - start2;
 
-      // Second call should be much faster (cached)
-      assert.ok(time2 < time1 / 2);
-
-      // Results should be identical
-      assert.deepStrictEqual(analytics1, analytics2);
+      // Second call should return the stale cached result
+      // (if caching works, totals won't include the new 999 transaction)
+      assert.strictEqual(analytics2.summary.totalRaised, originalTotal);
     });
 
     it("should use default date range when not specified", async () => {

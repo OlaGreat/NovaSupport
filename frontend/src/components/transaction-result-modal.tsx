@@ -94,7 +94,7 @@ export function TransactionResultModal({
           setTxStatus("finalized");
         }, 1500);
       } catch (err) {
-        if (cancelled) return;
+        if (cancelled || pollingDoneRef.current) return;
         setTxStatus("failed");
         setTxStatusMessage("Couldn't confirm transaction. Please check the explorer.");
         pollingDoneRef.current = true;
@@ -205,13 +205,18 @@ export function TransactionResultModal({
 
               <div className="mt-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-sky/80">
                 <span className="font-semibold text-white">Status:</span>{" "}
-                {txStatus === "confirming" && "Confirming..."}
-                {txStatus === "confirmed" && "Confirmed ✓"}
-                {txStatus === "finalized" && "Finalized"}
-                {txStatus === "failed" && "Failed"}
-                {txStatusMessage ? (
-                  <span className="mt-1 block text-red-300">{txStatusMessage}</span>
-                ) : null}
+                <span
+                  aria-live={txStatus === "failed" ? "assertive" : "polite"}
+                  aria-atomic="true"
+                >
+                  {txStatus === "confirming" && "Confirming..."}
+                  {txStatus === "confirmed" && "Confirmed ✓"}
+                  {txStatus === "finalized" && "Finalized"}
+                  {txStatus === "failed" && "Failed"}
+                  {txStatusMessage ? (
+                    <span className="mt-1 block text-red-300">{txStatusMessage}</span>
+                  ) : null}
+                </span>
               </div>
 
               <div className="mt-4 flex gap-2">

@@ -11,7 +11,8 @@ vi.mock('@stellar/freighter-api', () => ({
 }));
 
 // Mock @/lib/config
-vi.mock('@/lib/config', () => ({
+vi.mock('@/lib/config', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/config')>()),
   HORIZON_URL: 'https://horizon-testnet.stellar.org',
   API_BASE_URL: 'http://localhost:4000',
   STELLAR_NETWORK: 'TESTNET',
@@ -54,6 +55,25 @@ describe('WalletConnect', () => {
       expect(screen.getByText(/Connected:/)).toBeInTheDocument();
     });
     expect(screen.getByText(/GAAAAA/)).toBeInTheDocument();
+  });
+
+  it('dispatches wallet-connected after storing the address', async () => {
+    (isAllowed as any).mockResolvedValue({ isAllowed: true });
+    (getAddress as any).mockResolvedValue({ address: TEST_ADDRESS, error: null });
+    const storedAddresses: (string | null)[] = [];
+    const listener = () => storedAddresses.push(localStorage.getItem('walletAddress'));
+    window.addEventListener('wallet-connected', listener);
+
+    try {
+      render(<WalletConnect />);
+      fireEvent.click(screen.getByRole('button', { name: /freighter/i }));
+
+      await waitFor(() => {
+        expect(storedAddresses).toEqual([TEST_ADDRESS]);
+      });
+    } finally {
+      window.removeEventListener('wallet-connected', listener);
+    }
   });
 
   it('persists connection across re-renders', async () => {
@@ -109,7 +129,8 @@ describe('WalletConnect', () => {
     await waitFor(() => {
       expect(screen.getByText(errorMsg)).toBeInTheDocument();
     });
-    expect(screen.getByText('Connection failed.')).toBeInTheDocument();
+    // The specific error replaces the generic status line rather than joining it.
+    expect(screen.queryByText('Connection failed.')).not.toBeInTheDocument();
   });
 
   it('renders multiple wallet options when multiple detected', () => {

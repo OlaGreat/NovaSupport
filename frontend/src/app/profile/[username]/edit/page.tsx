@@ -113,11 +113,13 @@ export default function EditProfilePage() {
         if (!connectedAddress) {
           // Wallet not connected or Freighter is locked — show a prompt instead of silently redirecting
           setWalletPrompt("locked");
+          setOwnershipChecked(true);
           return;
         }
 
         if (connectedAddress !== profile.walletAddress) {
           setWalletPrompt("not-owner");
+          setOwnershipChecked(true);
           return;
         }
 
@@ -138,6 +140,7 @@ export default function EditProfilePage() {
         );
       } catch {
         setAuthError("Failed to load profile.");
+        setOwnershipChecked(true);
       } finally {
         setLoading(false);
       }
@@ -149,9 +152,13 @@ export default function EditProfilePage() {
     const code = newAssetCode.trim().toUpperCase();
     if (!code) { setAssetError("Asset code is required."); return; }
     if (!/^[A-Z0-9]{1,12}$/.test(code)) { setAssetError("Invalid asset code."); return; }
+    const issuerToAdd = newAssetIssuer.trim();
+    if (code !== "XLM" && !issuerToAdd) {
+      setAssetError(`Issuer required for ${code} — please enter the Stellar issuer address.`);
+      return;
+    }
     // #812: compare both code AND issuer so creators can accept multiple
     // issuers of the same asset code (e.g. Circle USDC vs another USDC).
-    const issuerToAdd = newAssetIssuer.trim();
     if (assets.some((a) => a.code === code && (a.issuer ?? "") === issuerToAdd)) {
       setAssetError("This exact asset (code + issuer) is already added.");
       return;
@@ -162,8 +169,11 @@ export default function EditProfilePage() {
     setAssetError(null);
   }
 
-  function removeAsset(code: string) {
-    setAssets((prev) => prev.filter((a) => a.code !== code));
+  function removeAsset(code: string, issuer?: string | null) {
+    const issuerToRemove = issuer ?? "";
+    setAssets((prev) =>
+      prev.filter((a) => a.code !== code || (a.issuer ?? "") !== issuerToRemove),
+    );
   }
 
   async function onSubmit(values: EditProfileFormValues) {
@@ -307,11 +317,13 @@ export default function EditProfilePage() {
             </h2>
 
             <Field
+              id="display-name"
               label="Display Name"
               required
               error={fieldErrors.displayName?.message}
             >
               <input
+                id="display-name"
                 type="text"
                 {...register("displayName")}
                 maxLength={64}
@@ -320,8 +332,9 @@ export default function EditProfilePage() {
               />
             </Field>
 
-            <Field label="Bio" error={fieldErrors.bio?.message}>
+            <Field id="bio" label="Bio" error={fieldErrors.bio?.message}>
               <textarea
+                id="bio"
                 {...register("bio")}
                 maxLength={280}
                 rows={3}
@@ -333,8 +346,9 @@ export default function EditProfilePage() {
               </p>
             </Field>
 
-            <Field label="Website URL" error={fieldErrors.websiteUrl?.message}>
+            <Field id="website-url" label="Website URL" error={fieldErrors.websiteUrl?.message}>
               <input
+                id="website-url"
                 type="url"
                 {...register("websiteUrl")}
                 className={inputCls(!!fieldErrors.websiteUrl)}
@@ -342,8 +356,9 @@ export default function EditProfilePage() {
               />
             </Field>
 
-            <Field label="Twitter Handle" error={fieldErrors.twitterHandle?.message}>
+            <Field id="twitter-handle" label="Twitter Handle" error={fieldErrors.twitterHandle?.message}>
               <input
+                id="twitter-handle"
                 type="text"
                 {...register("twitterHandle")}
                 maxLength={15}
@@ -352,8 +367,9 @@ export default function EditProfilePage() {
               />
             </Field>
 
-            <Field label="GitHub Handle" error={fieldErrors.githubHandle?.message}>
+            <Field id="github-handle" label="GitHub Handle" error={fieldErrors.githubHandle?.message}>
               <input
+                id="github-handle"
                 type="text"
                 {...register("githubHandle")}
                 maxLength={39}
@@ -362,8 +378,9 @@ export default function EditProfilePage() {
               />
             </Field>
 
-            <Field label="Email" error={fieldErrors.email?.message}>
+            <Field id="email" label="Email" error={fieldErrors.email?.message}>
               <input
+                id="email"
                 type="email"
                 {...register("email")}
                 className={inputCls(!!fieldErrors.email)}
@@ -381,14 +398,14 @@ export default function EditProfilePage() {
             <div className="flex flex-wrap gap-2">
               {assets.map((a) => (
                 <span
-                  key={a.code}
+                  key={`${a.code}:${a.issuer ?? ""}`}
                   className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm text-white"
                 >
                   {a.code}
                   <button
                     type="button"
-                    onClick={() => removeAsset(a.code)}
-                    aria-label={`Remove ${a.code}`}
+                    onClick={() => removeAsset(a.code, a.issuer)}
+                    aria-label={`Remove ${a.code}${a.issuer ? ` issued by ${a.issuer}` : ""}`}
                     className="text-steel hover:text-red-400 transition-colors leading-none"
                   >
                     ×
@@ -402,8 +419,9 @@ export default function EditProfilePage() {
 
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
               <div className="flex-1">
-                <label className="block text-xs text-steel mb-1">Asset Code</label>
+                <label htmlFor="new-asset-code" className="block text-xs text-steel mb-1">Asset Code</label>
                 <input
+                  id="new-asset-code"
                   type="text"
                   value={newAssetCode}
                   onChange={(e) => { setNewAssetCode(e.target.value.toUpperCase()); setAssetError(null); }}
@@ -413,8 +431,9 @@ export default function EditProfilePage() {
                 />
               </div>
               <div className="flex-1">
-                <label className="block text-xs text-steel mb-1">Issuer (optional)</label>
+                <label htmlFor="new-asset-issuer" className="block text-xs text-steel mb-1">Issuer (optional)</label>
                 <input
+                  id="new-asset-issuer"
                   type="text"
                   value={newAssetIssuer}
                   onChange={(e) => setNewAssetIssuer(e.target.value)}
@@ -464,11 +483,13 @@ function inputCls(hasError: boolean) {
 }
 
 function Field({
+  id,
   label,
   required,
   error,
   children,
 }: {
+  id: string;
   label: string;
   required?: boolean;
   error?: string;
@@ -476,7 +497,7 @@ function Field({
 }) {
   return (
     <div>
-      <label className="block text-xs font-medium text-steel mb-1.5">
+      <label htmlFor={id} className="block text-xs font-medium text-steel mb-1.5">
         {label}
         {required && <span className="text-red-400 ml-0.5">*</span>}
       </label>

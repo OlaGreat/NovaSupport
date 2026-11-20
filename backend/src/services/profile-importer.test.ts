@@ -39,8 +39,7 @@ function mockFetch(handler: (url: string, init?: RequestInit) => Response) {
 
 function mockFetchThrow(err: Error) {
   const original = global.fetch;
-  // @ts-expect-error — stubbing global fetch
-  global.fetch = () => Promise.reject(err);
+  global.fetch = (() => Promise.reject(err)) as typeof global.fetch;
   return () => {
     global.fetch = original;
   };

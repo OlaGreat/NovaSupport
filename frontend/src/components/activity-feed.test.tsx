@@ -197,4 +197,27 @@ describe("ActivityFeed", () => {
       expect(screen.getByText(/milestone data could not be loaded/i)).toBeInTheDocument();
     });
   });
+
+  it("shows transactions and a partial-failure notice when milestone JSON is malformed", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => {
+        if (url.includes("/milestones")) {
+          return Promise.resolve(new Response("not valid JSON", { status: 200 }));
+        }
+        return Promise.resolve(
+          new Response(JSON.stringify({ transactions: [makeTransaction("tx-1")] }), {
+            status: 200,
+          })
+        );
+      })
+    );
+
+    renderWithQueryClient(<ActivityFeed username="octocat" limit={5} />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/milestone data could not be loaded/i)).toBeInTheDocument();
+      expect(screen.getByText(/Received 10\.0000000 XLM/i)).toBeInTheDocument();
+    });
+  });
 });

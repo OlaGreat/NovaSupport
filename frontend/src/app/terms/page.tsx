@@ -12,6 +12,12 @@ export const metadata: Metadata = {
       "Read the NovaSupport Terms of Service for the Stellar-native creator support platform.",
     type: "website",
   },
+  twitter: {
+    card: "summary",
+    title: "Terms of Service · NovaSupport",
+    description:
+      "Read the NovaSupport Terms of Service for the Stellar-native creator support platform.",
+  },
 };
 
 export default function TermsPage() {
@@ -27,8 +33,8 @@ export default function TermsPage() {
 
         <Section title="1. Acceptance of Terms">
           <p>
-            By accessing or using NovaSupport ("the Platform"), you agree to be
-            bound by these Terms of Service ("Terms"). If you do not agree to
+            By accessing or using NovaSupport (&quot;the Platform&quot;), you agree to be
+            bound by these Terms of Service (&quot;Terms&quot;). If you do not agree to
             these Terms, do not use the Platform. These Terms govern your use of
             all services provided by NovaSupport, including but not limited to
             the creator profile pages, Stellar payment integrations, and
@@ -41,7 +47,7 @@ export default function TermsPage() {
             NovaSupport is a decentralised creator support platform built on the
             Stellar Network. It allows creators to publish a public profile page
             through which supporters can send Stellar assets (XLM, USDC, and
-            other Stellar-native tokens) directly to the creator's on-chain
+            other Stellar-native tokens) directly to the creator&apos;s on-chain
             wallet address. NovaSupport does not custody, hold, or transmit
             funds on behalf of any party.
           </p>
@@ -122,7 +128,7 @@ export default function TermsPage() {
             All content you submit to NovaSupport (profile text, avatar images,
             milestone descriptions) remains your property. You grant NovaSupport
             a non-exclusive, royalty-free licence to display that content on the
-            Platform for the purpose of providing the service. NovaSupport's own
+            Platform for the purpose of providing the service. NovaSupport&apos;s own
             software, design, and trade marks are the property of NovaSupport
             and may not be used without prior written consent.
           </p>
@@ -130,7 +136,7 @@ export default function TermsPage() {
 
         <Section title="8. Disclaimer of Warranties">
           <p>
-            The Platform is provided "as is" and "as available" without
+            The Platform is provided &quot;as is&quot; and &quot;as available&quot; without
             warranties of any kind, either express or implied. NovaSupport does
             not warrant that the Platform will be uninterrupted, error-free, or
             free from harmful components. Use of the Platform is at your own
@@ -151,7 +157,7 @@ export default function TermsPage() {
         <Section title="10. Changes to Terms">
           <p>
             We reserve the right to modify these Terms at any time. Changes will
-            be effective upon posting to this page with an updated "Last updated"
+            be effective upon posting to this page with an updated &quot;Last updated&quot;
             date. Continued use of the Platform after changes constitutes your
             acceptance of the revised Terms.
           </p>

@@ -76,15 +76,23 @@ username, email, contactEmail, notificationEmail
 
 | Field Type | Max Length | Description |
 |------------|------------|-------------|
-| bio | 500 | User biography |
+| bio | 280 | User biography |
 | message | 280 | Support messages (Twitter-like) |
 | description | 1000 | General descriptions |
-| displayName | 100 | Display names |
+| displayName | 64 | Display names |
+| name | 64 | Names (same cap as displayName) |
 | title | 200 | Titles and headings |
-| username | 50 | Usernames |
+| username | 32 | Usernames |
 | twitterHandle | 15 | Twitter handle limit |
 | githubHandle | 39 | GitHub handle limit |
 | url | 2048 | URL length limit |
+
+### Array values
+
+String items of an array get the rules of the field that holds the array, in
+request bodies and in query strings alike (`?tag=a&tag=b`, `?tag[]=a`). An
+array under an unknown field name falls back to the `message` rules, so its
+items are still HTML-stripped.
 
 ## Usage
 

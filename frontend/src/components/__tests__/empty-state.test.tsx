@@ -10,10 +10,10 @@ describe("EmptyState", () => {
     expect(container).toMatchSnapshot();
   });
 
-  it("renders supporters variant", () => {
+  it("renders no-supporters variant", () => {
     const { container } = render(
       <EmptyState
-        variant="supporters"
+        variant="no-supporters"
         title="Be the first to support!"
         description="This profile hasn't received support yet."
       />
@@ -21,10 +21,10 @@ describe("EmptyState", () => {
     expect(container).toMatchSnapshot();
   });
 
-  it("renders transactions variant", () => {
+  it("renders no-transactions variant", () => {
     const { container } = render(
       <EmptyState
-        variant="transactions"
+        variant="no-transactions"
         title="No transactions yet"
         description="Transactions will appear here once supporters send funds."
       />
@@ -32,10 +32,10 @@ describe("EmptyState", () => {
     expect(container).toMatchSnapshot();
   });
 
-  it("renders explore variant", () => {
+  it("renders no-results variant", () => {
     const { container } = render(
       <EmptyState
-        variant="explore"
+        variant="no-results"
         title="No creators found"
         description="Try adjusting your search or check back later."
       />
@@ -43,13 +43,13 @@ describe("EmptyState", () => {
     expect(container).toMatchSnapshot();
   });
 
-  it("renders with action button", () => {
-    const mockClick = vi.fn();
+  it("renders with a call-to-action link", () => {
     const { container } = render(
       <EmptyState
         title="No results"
         description="Try adjusting your search"
-        action={{ label: "Clear Search", onClick: mockClick }}
+        ctaLabel="Clear Search"
+        ctaHref="/explore"
       />
     );
     expect(container).toMatchSnapshot();

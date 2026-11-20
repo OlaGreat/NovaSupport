@@ -2,6 +2,7 @@
   "name": "novasupport-frontend",
   "version": "0.1.0",
   "private": true,
+  "engines": { "node": ">=22.0.0" },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -15,6 +16,7 @@
     "@stellar/freighter-api": "^4.1.0",
     "@stellar/stellar-sdk": "^13.3.0",
     "@tanstack/react-query": "^5.101.4",
+    "@testing-library/dom": "^10.4.2",
     "clsx": "^2.1.1",
     "focus-trap-react": "^10.3.1",
     "framer-motion": "^12.38.0",
@@ -32,6 +34,7 @@
     "@playwright/test": "^1.61.1",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.2.0",
+    "@testing-library/user-event": "^14.6.6",
     "@types/node": "^20.17.30",
     "@types/react": "^18.3.23",
     "@types/react-dom": "^18.3.7",

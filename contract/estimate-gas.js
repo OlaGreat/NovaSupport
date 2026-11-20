@@ -3,12 +3,17 @@
  * Gas estimation script for the NovaSupport support() contract function.
  *
  * Usage:
- *   node estimate-gas.js [--network testnet|mainnet] [--message-length <n>]
+ *   node estimate-gas.js
+ *
+ * Environment variables:
+ *   RPC_URL             - Soroban RPC endpoint (default: testnet)
+ *   NETWORK_PASSPHRASE  - Stellar network passphrase (default: testnet)
+ *   CONTRACT_ID         - Deployed support_page contract address (required)
+ *   SUPPORTER_SECRET    - Secret key for the simulated supporter account (required)
+ *   RECIPIENT_ADDRESS   - G... address of the simulated recipient
  *
  * Prerequisites:
  *   npm install @stellar/stellar-sdk
- *
- * Set CONTRACT_ID and RPC_URL env vars, or rely on the defaults below.
  */
 
 import {
@@ -27,12 +32,24 @@ const RPC_URL =
   process.env.RPC_URL ?? "https://soroban-testnet.stellar.org";
 const NETWORK_PASSPHRASE =
   process.env.NETWORK_PASSPHRASE ?? Networks.TESTNET;
-const CONTRACT_ID = process.env.CONTRACT_ID ?? "<YOUR_CONTRACT_ID>";
+const CONTRACT_ID = process.env.CONTRACT_ID;
+const SUPPORTER_SECRET = process.env.SUPPORTER_SECRET;
 
-// Dummy funded testnet keypairs for simulation (no real XLM sent)
-const SUPPORTER_SECRET =
-  process.env.SUPPORTER_SECRET ??
-  "SCZANGBA5RLMPI35NZCPKJIZM5AFCVJ3KFGZ6BFLAQEP6NMDSCEVAQZ";
+if (!CONTRACT_ID) {
+  console.error(
+    "ERROR: Set CONTRACT_ID env var to your deployed contract address.\n" +
+      "  CONTRACT_ID=C... node estimate-gas.js",
+  );
+  process.exit(1);
+}
+
+if (!SUPPORTER_SECRET) {
+  console.error(
+    "ERROR: Set SUPPORTER_SECRET env var to a funded testnet secret key.\n" +
+      "  SUPPORTER_SECRET=S... node estimate-gas.js",
+  );
+  process.exit(1);
+}
 const RECIPIENT_ADDRESS =
   process.env.RECIPIENT_ADDRESS ??
   "GBZXN7PIRZGNMHGA7MUUUF4GWPY5AYPV6LY4UV2GL6VJGIQRXFDNMADI";
@@ -120,14 +137,6 @@ async function estimateScenario(server, keypair, scenario) {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
-  if (CONTRACT_ID === "<YOUR_CONTRACT_ID>") {
-    console.error(
-      "ERROR: Set CONTRACT_ID env var to your deployed contract address.\n" +
-        "  CONTRACT_ID=C... node scripts/estimate-gas.js",
-    );
-    process.exit(1);
-  }
-
   const server = new SorobanRpc.Server(RPC_URL);
   const keypair = Keypair.fromSecret(SUPPORTER_SECRET);
 

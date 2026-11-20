@@ -5,7 +5,7 @@ import { Metrics } from "../metrics.js";
 
 const DRIP_BATCH_SIZE = 100;
 
-function addMonths(date: Date, months: number): Date {
+export function addMonths(date: Date, months: number): Date {
   const result = new Date(date);
   const targetMonth = result.getMonth() + months;
   result.setMonth(targetMonth);
@@ -39,43 +39,54 @@ export async function processDueRecurringSupports(prismaClient = prisma, now = n
     if (dueSupports.length === 0) break;
 
     for (const support of dueSupports) {
-    // #608: supporterId is NULL when the supporter's account was deleted (SET NULL FK).
-    // Mark the subscription cancelled so it stops appearing as due and so
-    // the profile owner can see the cancellation in their dashboard.
-    if (!support.supporter) {
-      await prismaClient.recurringSupport.update({
-        where: { id: support.id },
-        data: { status: "cancelled", cancelledAt: new Date() },
-      });
-      logger.info({ dripId: support.id, profileId: support.profileId }, "Recurring support cancelled: supporter account deleted");
-      continue;
-    }
-
     try {
-      const supporter = support.supporter;
-      // Calculate nextRunAt based on frequency
-      const nextRunAt =
+      // #608: supporterId is NULL when the supporter's account was deleted (SET NULL FK).
+      // Mark the subscription cancelled so it stops appearing as due and so
+      // the profile owner can see the cancellation in their dashboard. The
+      // write is inside the per-item try so one failure cannot abort the
+      // rest of the batch (#1498).
+      if (!support.supporter) {
+        await prismaClient.recurringSupport.update({
+          where: { id: support.id },
+          data: { status: "cancelled", cancelledAt: new Date() },
+        });
+        logger.info({ dripId: support.id, profileId: support.profileId }, "Recurring support cancelled: supporter account deleted");
+        continue;
+      }
+
+      // Calculate nextRunAt based on frequency, advancing from now if stale
+      let nextRunAt =
         support.frequency === "weekly"
           ? new Date(support.nextRunAt.getTime() + 7 * 24 * 60 * 60 * 1000)
           : addMonths(support.nextRunAt, 1);
 
-      // Atomic claim: only one scheduler instance wins the row
-      const claimed = await prismaClient.$executeRaw`
-        UPDATE "RecurringSupport"
-        SET "nextRunAt" = ${nextRunAt}
-        WHERE id = ${support.id} AND "nextRunAt" <= ${now}
-      `;
-
-      if (claimed === 0) {
-        logger.info({ dripId: support.id }, "Recurring support already claimed by another process");
-        continue;
+      // If nextRunAt is still in the past, keep advancing until it's in the future (#1258)
+      while (nextRunAt <= now) {
+        nextRunAt =
+          support.frequency === "weekly"
+            ? new Date(nextRunAt.getTime() + 7 * 24 * 60 * 60 * 1000)
+            : addMonths(nextRunAt, 1);
       }
 
-      await prismaClient.recurringSupportExecution.create({
-        data: {
-          recurringSupportId: support.id,
-          status: "pending",
-        },
+      // Atomically create the execution and claim the subscription in a single
+      // transaction so concurrent scheduler instances cannot double-process.
+      await prismaClient.$transaction(async (transaction) => {
+        await transaction.recurringSupportExecution.create({
+          data: {
+            recurringSupportId: support.id,
+            status: "pending",
+          },
+        });
+
+        const claimed = await transaction.$executeRaw`
+          UPDATE "RecurringSupport"
+          SET "nextRunAt" = ${nextRunAt}
+          WHERE id = ${support.id} AND "nextRunAt" <= ${now} AND "status" = 'active'
+        `;
+
+        if (claimed === 0) {
+          throw new Error("Recurring support was already claimed");
+        }
       });
 
       logger.info({
@@ -121,6 +132,25 @@ function runDripSchedulerTick(): void {
 }
 
 export function startDripScheduler(): SchedulerHandle {
+  // Guard against re-entry: return handle to existing scheduler if already running
+  if (dripInterval !== null && !dripStopped) {
+    logger.warn("Drip scheduler already running, returning existing handle");
+    return {
+      async stop() {
+        if (dripStopped) return;
+        dripStopped = true;
+        if (dripInterval) {
+          clearInterval(dripInterval);
+          dripInterval = null;
+        }
+        if (dripInFlight) {
+          await dripInFlight;
+        }
+        logger.info("Drip scheduler stopped.");
+      },
+    };
+  }
+
   if (process.env.DRIP_SCHEDULER_ENABLED === "true") {
     logger.info("Drip scheduler enabled. Starting...");
     dripStopped = false;

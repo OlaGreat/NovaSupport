@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import {
+  calculateDestinationMinimum,
   classifyStellarError,
   withStellarRetry,
 } from "./stellar";
@@ -39,11 +40,21 @@ describe("classifyStellarError (#274)", () => {
       "ECONNREFUSED",
       "network error",
       "ETIMEDOUT",
-      "operation aborted",
     ]) {
       const c = classifyStellarError(new Error(msg));
       expect(c.kind).toBe("network");
       expect(c.retryable).toBe(true);
+    }
+  });
+
+  it("does not retry cancelled requests", () => {
+    for (const error of [
+      new Error("operation aborted"),
+      Object.assign(new Error("cancelled"), { name: "AbortError" }),
+    ]) {
+      const c = classifyStellarError(error);
+      expect(c.kind).toBe("unknown");
+      expect(c.retryable).toBe(false);
     }
   });
 
@@ -56,6 +67,18 @@ describe("classifyStellarError (#274)", () => {
   it("user-facing messages never expose raw error strings", () => {
     const c = classifyStellarError(new Error("internal stack 0xDEADBEEF"));
     expect(c.userMessage).not.toContain("0xDEADBEEF");
+  });
+});
+
+describe("calculateDestinationMinimum", () => {
+  it("calculates large amounts without floating-point loss", () => {
+    expect(
+      calculateDestinationMinimum("9007199254740991.1234567", 0.02),
+    ).toBe("8827055269646171.3009876");
+  });
+
+  it("rounds the exact decimal result to seven places", () => {
+    expect(calculateDestinationMinimum("12.3456789", 0.02)).toBe("12.0987653");
   });
 });
 

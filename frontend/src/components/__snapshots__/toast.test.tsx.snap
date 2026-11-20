@@ -5,11 +5,13 @@ exports[`Toast > renders error toast 1`] = `
   <div
     class="fixed bottom-4 right-4 px-4 py-3 rounded shadow-lg text-white
       bg-red-600"
+    role="status"
   >
     <span>
       Error!
     </span>
     <button
+      aria-label="Dismiss"
       class="ml-4 font-bold"
     >
       ×
@@ -23,11 +25,13 @@ exports[`Toast > renders success toast 1`] = `
   <div
     class="fixed bottom-4 right-4 px-4 py-3 rounded shadow-lg text-white
       bg-green-600"
+    role="status"
   >
     <span>
       Success!
     </span>
     <button
+      aria-label="Dismiss"
       class="ml-4 font-bold"
     >
       ×

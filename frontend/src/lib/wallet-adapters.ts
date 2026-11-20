@@ -46,7 +46,8 @@ export function mapWalletError(error: unknown): string {
       case "SIGNING_DENIED":
         return "You declined the transaction in your wallet.";
       case "NOT_FOUND":
-        return `${error.message}. Please install a Stellar wallet extension.`;
+        const baseMessage = error.message.endsWith(".") ? error.message.slice(0, -1) : error.message;
+        return `${baseMessage}. Please install a Stellar wallet extension.`;
       case "CONNECTION_DENIED":
         return "Wallet access was not granted. Please allow the site and try again.";
       case "SIGNING_FAILED":
@@ -60,6 +61,15 @@ export function mapWalletError(error: unknown): string {
 }
 
 // ─── Freighter ────────────────────────────────────────────────────────────────
+
+// Freighter reports a user decline as an error string. Other errors (network
+// mismatch, extension fault) are failures, not declines, and must not be shown
+// as "you declined".
+const FREIGHTER_DECLINE_PATTERN = /reject|declin|denied|cancel/i;
+
+function isFreighterDecline(message: string): boolean {
+  return FREIGHTER_DECLINE_PATTERN.test(message);
+}
 
 const freighterAdapter: WalletAdapter = {
   id: "freighter",
@@ -80,14 +90,25 @@ const freighterAdapter: WalletAdapter = {
         throw new WalletError("Freighter permission denied.", "CONNECTION_DENIED");
     }
     const result = await getAddress();
-    if (result.error) throw new WalletError(result.error, "CONNECTION_DENIED");
+    if (result.error) {
+      const message = String(result.error);
+      throw new WalletError(
+        message,
+        isFreighterDecline(message) ? "CONNECTION_DENIED" : "UNKNOWN",
+      );
+    }
     return result.address;
   },
   async signTransaction(xdr, { address, networkPassphrase }) {
     const { signTransaction } = await import("@stellar/freighter-api");
     const result = await signTransaction(xdr, { address, networkPassphrase });
-    if (result.error)
-      throw new WalletError(result.error, "SIGNING_DENIED");
+    if (result.error) {
+      const message = String(result.error);
+      throw new WalletError(
+        message,
+        isFreighterDecline(message) ? "SIGNING_DENIED" : "SIGNING_FAILED",
+      );
+    }
     if (!result.signedTxXdr)
       throw new WalletError("Freighter did not return a signed transaction.", "SIGNING_FAILED");
     return result.signedTxXdr;
@@ -143,10 +164,10 @@ const lobstrAdapter: WalletAdapter = {
     if (!result) throw new WalletError("Lobstr did not return a public key.", "CONNECTION_DENIED");
     return result;
   },
-  async signTransaction(xdr, _options) {
+  async signTransaction(xdr, { networkPassphrase }) {
     const lobstr = (window as any).lobstr;
     if (!lobstr) throw new WalletError("Lobstr extension not found.", "NOT_FOUND");
-    const result = await lobstr.signTransaction(xdr);
+    const result = await lobstr.signTransaction(xdr, { networkPassphrase });
     if (!result?.signedTxXdr)
       throw new WalletError("Lobstr did not return a signed transaction.", "SIGNING_FAILED");
     return result.signedTxXdr;
@@ -167,4 +188,11 @@ export function getAvailableWallets(): WalletAdapter[] {
 
 export function getWalletAdapter(id: WalletId): WalletAdapter | undefined {
   return ALL_ADAPTERS.find((a) => a.id === id);
+}
+
+export function getStoredWalletAddress(): string | null {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") {
+    return null;
+  }
+  return localStorage.getItem("walletAddress");
 }

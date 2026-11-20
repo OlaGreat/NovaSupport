@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ProfileCard } from '@/components/profile-card';
 
 const showToast = vi.fn();
 
 // Mock @/lib/config
-vi.mock('@/lib/config', () => ({
+vi.mock('@/lib/config', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/config')>()),
   HORIZON_URL: 'https://horizon-testnet.stellar.org',
   API_BASE_URL: 'http://localhost:4000',
   STELLAR_NETWORK: 'TESTNET',
@@ -15,7 +16,8 @@ vi.mock('@/lib/config', () => ({
 }));
 
 // Mock @/lib/stellar
-vi.mock('@/lib/stellar', () => ({
+vi.mock('@/lib/stellar', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/stellar')>()),
   getNetworkLabel: vi.fn(() => 'Testnet'),
   isValidStellarAddress: vi.fn(() => true),
   stellarConfig: {
@@ -122,6 +124,57 @@ describe('ProfileCard', () => {
 
     await waitFor(() => {
       expect(showToast).toHaveBeenCalledWith('Wallet address copied!', 'success');
+    });
+  });
+
+  it('renders QR code button in share section', () => {
+    render(<ProfileCard {...mockProfile} />);
+
+    const qrButton = screen.getByRole('button', { name: /show qr code/i });
+    expect(qrButton).toBeInTheDocument();
+    expect(qrButton.textContent).toContain('QR Code');
+  });
+
+  it('shows QR modal when QR code button is clicked', async () => {
+    const { container } = render(<ProfileCard {...mockProfile} />);
+
+    const qrButton = screen.getByRole('button', { name: /show qr code/i });
+    fireEvent.click(qrButton);
+
+    await waitFor(() => {
+      const modal = container.querySelector('[class*="fixed"][class*="inset-0"]');
+      expect(modal).toBeInTheDocument();
+    });
+  });
+
+  describe('ownership re-check (#1449)', () => {
+    beforeEach(() => {
+      localStorage.clear();
+    });
+
+    it('shows the email-verification banner after the owner connects mid-session', () => {
+      render(<ProfileCard {...mockProfile} isVerified={false} />);
+      expect(screen.queryByText('Verify your email address')).not.toBeInTheDocument();
+
+      act(() => {
+        localStorage.setItem('walletAddress', mockProfile.walletAddress);
+        window.dispatchEvent(new Event('wallet-connected'));
+      });
+
+      expect(screen.getByText('Verify your email address')).toBeInTheDocument();
+    });
+
+    it('hides the email-verification banner after the owner disconnects', () => {
+      localStorage.setItem('walletAddress', mockProfile.walletAddress);
+      render(<ProfileCard {...mockProfile} isVerified={false} />);
+      expect(screen.getByText('Verify your email address')).toBeInTheDocument();
+
+      act(() => {
+        localStorage.removeItem('walletAddress');
+        window.dispatchEvent(new Event('wallet-disconnected'));
+      });
+
+      expect(screen.queryByText('Verify your email address')).not.toBeInTheDocument();
     });
   });
 });

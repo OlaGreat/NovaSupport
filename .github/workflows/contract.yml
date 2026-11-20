@@ -12,6 +12,10 @@ on:
       - "contract/**"
       - ".github/workflows/contract.yml"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   contract:
     name: Contract checks
@@ -29,7 +33,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Install stable Rust with WASM target
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.88.0
         with:
           targets: wasm32-unknown-unknown
 

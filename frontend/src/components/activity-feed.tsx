@@ -12,7 +12,6 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import Link from "next/link";
 import { API_BASE_URL } from "@/lib/config";
 import { stellarExpertUrl } from "@/lib/stellar";
 
@@ -87,10 +86,16 @@ async function fetchActivities(username: string, signal?: AbortSignal): Promise<
     ? await transactionsRes.json()
     : { transactions: [] };
 
-  const milestonesUnavailable = milestonesRes?.ok !== true;
-  const milestonesData = !milestonesUnavailable
-    ? await milestonesRes!.json()
-    : { milestones: [] };
+  let milestonesUnavailable = milestonesRes?.ok !== true;
+  let milestonesData = { milestones: [] };
+
+  if (!milestonesUnavailable) {
+    try {
+      milestonesData = await milestonesRes!.json();
+    } catch {
+      milestonesUnavailable = true;
+    }
+  }
 
   const items: ActivityItem[] = [];
 
@@ -238,7 +243,7 @@ export function ActivityFeed({ username, limit = 10 }: ActivityFeedProps) {
                           </span>
                         )}
                         {activity.metadata.txHash && (
-                          <Link
+                          <a
                             href={stellarExpertUrl('tx', activity.metadata.txHash)}
                             target="_blank"
                             rel="noopener noreferrer"
@@ -246,7 +251,7 @@ export function ActivityFeed({ username, limit = 10 }: ActivityFeedProps) {
                           >
                             {truncateHash(activity.metadata.txHash)}
                             <span>↗</span>
-                          </Link>
+                          </a>
                         )}
                       </div>
                     )}

@@ -1,0 +1,94 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    groups:
+      frontend-runtime-minor-patch:
+        patterns:
+          - "next"
+          - "react"
+          - "react-dom"
+          - "framer-motion"
+          - "@tailwindcss/*"
+          - "tailwindcss"
+        update-types: ["minor", "patch"]
+      frontend-tooling-minor-patch:
+        patterns:
+          - "@types/*"
+          - "@testing-library/*"
+          - "vite"
+          - "vitest"
+          - "typescript"
+          - "eslint"
+        update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "next"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "framer-motion"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "tailwindcss"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@stellar/stellar-sdk"
+        update-types: ["version-update:semver-major"]
+  - package-ecosystem: "npm"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    groups:
+      backend-runtime-minor-patch:
+        patterns:
+          - "express"
+          - "express-rate-limit"
+          - "bullmq"
+          - "ioredis"
+          - "pino"
+          - "pino-http"
+          - "@prisma/client"
+          - "prisma"
+        update-types: ["minor", "patch"]
+      backend-tooling-minor-patch:
+        patterns:
+          - "@types/*"
+          - "@typescript-eslint/*"
+          - "eslint"
+          - "tsx"
+          - "typescript"
+        update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "express"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "express-rate-limit"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "prisma"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@prisma/client"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "bullmq"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "ioredis"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "pino"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@stellar/stellar-sdk"
+        update-types: ["version-update:semver-major"]
+  - package-ecosystem: "cargo"
+    directory: "/contract"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    groups:
+      contract-minor-patch:
+        update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "soroban-sdk"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "stellar-*"
+        update-types: ["version-update:semver-major"]

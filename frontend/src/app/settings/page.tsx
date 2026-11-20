@@ -6,8 +6,7 @@ import { AppShell } from "@/components/app-shell";
 import { Toast } from "@/components/toast";
 import { NotificationPreferences } from "@/components/notification-preferences";
 import { apiFetch } from "@/lib/api-client";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+import { API_BASE_URL } from "@/lib/config";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -17,39 +16,72 @@ export default function SettingsPage() {
   const [resending, setResending] = useState(false);
   const [deleteStep, setDeleteStep] = useState(0);
   const [deleting, setDeleting] = useState(false);
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [toast, setToast] = useState<{
+    message: string;
+    type: "success" | "error";
+  } | null>(null);
 
   useEffect(() => {
-    const storedUsername = localStorage.getItem("username");
-    if (!storedUsername) {
-      router.push("/");
-      return;
-    }
-    setUsername(storedUsername);
+    async function loadCurrentUser() {
+      try {
+        const meRes = await apiFetch(`${API_BASE_URL}/auth/me`, {
+          suppressAuthExpired: true,
+        } as RequestInit & { suppressAuthExpired?: boolean });
+        if (!meRes.ok) {
+          router.push("/");
+          return;
+        }
 
-    apiFetch(`${API_BASE_URL}/profiles/${storedUsername}`)
-      .then(async (res) => {
-        if (!res.ok) return;
-        const data = await res.json();
-        setEmailVerified(Boolean(data.emailVerified));
-      })
-      .finally(() => setLoading(false));
+        const me = await meRes.json();
+        const resolvedUsername =
+          typeof me?.username === "string" ? me.username : null;
+        if (!resolvedUsername) {
+          router.push("/");
+          return;
+        }
+
+        setUsername(resolvedUsername);
+
+        const profileRes = await apiFetch(
+          `${API_BASE_URL}/profiles/${resolvedUsername}`,
+        );
+        if (profileRes.ok) {
+          const data = await profileRes.json();
+          setEmailVerified(Boolean(data.emailVerified));
+        }
+      } catch {
+        router.push("/");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadCurrentUser();
   }, [router]);
 
   async function handleResendVerification() {
     if (!username) return;
     setResending(true);
     try {
-      const res = await apiFetch(`${API_BASE_URL}/profiles/${username}/resend-verification-email`, {
-        method: "POST",
-      });
+      const res = await apiFetch(
+        `${API_BASE_URL}/profiles/${username}/resend-verification-email`,
+        {
+          method: "POST",
+        },
+      );
       setToast(
         res.ok
-          ? { message: "Verification email sent — check your inbox", type: "success" }
+          ? {
+              message: "Verification email sent — check your inbox",
+              type: "success",
+            }
           : { message: "Failed to resend verification email", type: "error" },
       );
     } catch {
-      setToast({ message: "Failed to resend verification email", type: "error" });
+      setToast({
+        message: "Failed to resend verification email",
+        type: "error",
+      });
     } finally {
       setResending(false);
     }
@@ -59,13 +91,27 @@ export default function SettingsPage() {
     if (!username) return;
     setDeleting(true);
     try {
-      const res = await apiFetch(`${API_BASE_URL}/profiles/${username}`, { method: "DELETE" });
+      const res = await apiFetch(`${API_BASE_URL}/profiles/${username}`, {
+        method: "DELETE",
+      });
       if (!res.ok) throw new Error("Failed to delete profile");
+
+      // Revoke the JWT server-side so it can't keep authenticating requests
+      // as the now-deleted profile for the rest of its 1h expiry.
+      await apiFetch(`${API_BASE_URL}/v1/auth/logout`, {
+        method: "POST",
+      }).catch(() => {});
+
       localStorage.removeItem("username");
+      // Clear wallet-connect widget state so it doesn't auto-restore a
+      // "connected" UI for a wallet whose profile no longer exists.
+      localStorage.removeItem("walletAddress");
+      localStorage.removeItem("walletId");
       router.push("/");
     } catch (err: unknown) {
       setToast({
-        message: err instanceof Error ? err.message : "Failed to delete profile",
+        message:
+          err instanceof Error ? err.message : "Failed to delete profile",
         type: "error",
       });
       setDeleting(false);
@@ -88,7 +134,9 @@ export default function SettingsPage() {
       <div className="mx-auto max-w-2xl px-4 py-10 space-y-8">
         <div>
           <h1 className="text-2xl font-semibold text-white mb-1">Settings</h1>
-          <p className="text-sm text-white/50">Manage your account preferences.</p>
+          <p className="text-sm text-white/50">
+            Manage your account preferences.
+          </p>
         </div>
 
         <section className="rounded-2xl border border-white/10 bg-white/5 p-6 space-y-3">
@@ -120,8 +168,8 @@ export default function SettingsPage() {
             Danger zone
           </h2>
           <p className="text-xs text-white/50">
-            Deleting your profile permanently removes it and all related data (transactions,
-            milestones, webhooks). This cannot be undone.
+            Deleting your profile permanently removes it and all related data
+            (transactions, milestones, webhooks). This cannot be undone.
           </p>
 
           {deleteStep === 0 && (
@@ -174,7 +222,13 @@ export default function SettingsPage() {
         </section>
       </div>
 
-      {toast && <Toast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onDismiss={() => setToast(null)}
+        />
+      )}
     </AppShell>
   );
 }

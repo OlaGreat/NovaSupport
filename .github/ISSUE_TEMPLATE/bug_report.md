@@ -28,7 +28,7 @@ What actually happened. Include error messages, screenshots, or console output i
 
 - Area: Frontend / Backend / Contract (delete as appropriate)
 - Browser (if frontend): e.g. Chrome 123, Firefox 124
-- Node version (if backend): e.g. 20.11.0
+- Node version (if backend): e.g. 22.0.0
 - OS: e.g. Ubuntu 22.04, macOS 14
 
 ## Additional Context

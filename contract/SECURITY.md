@@ -16,8 +16,8 @@ changes to the contract.
   Zero-value and negative-value calls are rejected at the contract level.
 
 - **Persistent support count.** `SupportCount` is stored in persistent storage and survives
-  ledger closings. The SDK automatically manages the entry TTL on writes; entries will not
-  silently disappear between calls within their TTL window.
+  ledger closings. The contract explicitly calls `extend_ttl()` after every write to ensure
+  entries remain live; entries will not silently disappear between calls within their TTL window.
 
 - **Structured event emission.** Every successful call emits a `SupportEvent` containing
   `supporter`, `recipient`, `amount`, `asset_code`, and `message` under the topic `"support"`.
@@ -40,9 +40,10 @@ changes to the contract.
 - **No duplicate-support prevention.** The same `supporter` can call `support()` multiple
   times for the same `recipient`. `SupportCount` is a global counter, not per-supporter.
 
-- **No message validation.** `message` is accepted as any `soroban_sdk::String` and placed
-  directly into the emitted event. The contract does not enforce length limits, content
-  policy, or encoding beyond what the Soroban host imposes.
+- **Limited message validation.** `message` must be non-empty and no longer than 280
+  characters (`support()` returns `EmptyMessage` / `MessageTooLong` otherwise). Beyond that
+  length check, the contract does not enforce content policy or encoding beyond what the
+  Soroban host imposes.
 
 - **No asset verification.** `asset_code` is a free-form string. The contract does not
   verify that the string corresponds to a real Stellar asset or matches the payment
@@ -59,7 +60,7 @@ changes to the contract.
   authorize pause/unpause operations via `require_auth()`. An upgrade path does not exist;
   contract code is immutable once deployed.
 
-- **Immutable once deployed.** The contract has no `upgrade` entry point or admin key. Once deployed to a contract ID, the WASM cannot be altered. This ensures that the logic seen at the time of deployment is what will always execute for that ID. Any "upgrade" requires deploying a new contract instance and updating the platform to use the new ID.
+- **Immutable once deployed.** The contract has no `upgrade` entry point. Once deployed to a contract ID, the WASM cannot be altered, and the admin key confers no upgrade authority. This ensures that the logic seen at the time of deployment is what will always execute for that ID. Any "upgrade" requires deploying a new contract instance and updating the platform to use the new ID.
 
 - **Events are trusted as-is.** The backend and frontend are responsible for validating
   event data. The contract emits whatever values it receives; it does not cross-check
@@ -89,8 +90,9 @@ Keep the old contract ID in release notes and monitoring so historical events re
 - **Extend TTL on persistent storage writes.** If you add new persistent storage entries,
   call `env.storage().persistent().extend_ttl(key, threshold, extend_to)` after each write,
   or entries will expire and silently return `None` on the next read. The current contract
-  relies on the SDK's automatic bump on `set()` — verify this behaviour holds for any new
-  entry type you introduce.
+  explicitly calls `extend_ttl()` immediately after every `set()` — this is intentional and
+  required. You must do the same for any new entry type you introduce; there is no automatic
+  TTL extension on write.
 
 - **Avoid storing unbounded data in persistent storage at scale.** Storing full message
   strings per supporter would make storage costs grow linearly with usage. Use events

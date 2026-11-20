@@ -27,4 +27,11 @@ describe('Toast', () => {
     
     expect(mockDismiss).toHaveBeenCalled();
   });
+
+  it('exposes toast updates and the dismiss action to assistive technology', () => {
+    render(<Toast message="Saved" type="success" onDismiss={mockDismiss} />);
+
+    expect(screen.getByRole('status')).toHaveTextContent('Saved');
+    expect(screen.getByRole('button', { name: 'Dismiss' })).toBeInTheDocument();
+  });
 });

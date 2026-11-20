@@ -28,7 +28,6 @@ model Profile {
   emailVerified             Boolean                  @default(false)
   emailVerificationToken    String?                  @unique
   emailVerificationExpiry   DateTime?
-  notifyOnSupport           Boolean                  @default(true)
   websiteUrl                String?
   twitterHandle             String?
   githubHandle              String?
@@ -57,6 +56,8 @@ model NotificationPreferences {
   notifyOnSupport   Boolean  @default(true)
   notifyOnMilestone Boolean  @default(true)
   weeklyDigest      Boolean  @default(false)
+  /// When this profile's weekly digest was last emailed; lets a retried run skip it (#1499).
+  lastWeeklyDigestSentAt DateTime?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   profile           Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
@@ -105,20 +106,22 @@ model SupportTransaction {
 }
 
 model Milestone {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   title         String
   description   String?
-  targetAmount  Decimal  @db.Decimal(18, 7)
-  currentAmount Decimal  @db.Decimal(18, 7) @default(0)
-  assetCode     String   @default("XLM")
+  targetAmount  Decimal   @db.Decimal(18, 7)
+  currentAmount Decimal   @db.Decimal(18, 7) @default(0)
+  assetCode     String    @default("XLM")
   assetIssuer   String?
-  status        String   @default("active")
+  status        String    @default("active")
+  reachedAt     DateTime?
   profileId     String
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  profile       Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  profile       Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@index([profileId])
+  @@index([profileId, status, reachedAt(sort: Desc)])
 }
 
 model Badge {
@@ -146,7 +149,13 @@ model ProfileBadge {
 model Webhook {
   id         String            @id @default(cuid())
   url        String
+  // secretHash stores a SHA-256 hash of the raw secret — never the plaintext.
+  // It is kept for audit / future inbound-verification use only.
   secretHash String
+  // signingKey holds the raw secret used to HMAC-sign outbound deliveries.
+  // It is shown to the creator exactly once (at creation time) and never
+  // re-exposed through any API response.
+  signingKey String
   active     Boolean           @default(true)
   profileId  String
   createdAt  DateTime          @default(now())
@@ -269,11 +278,13 @@ model ProfileReport {
   profileId  String
   reason     String
   details    String?
-  reporterIp String
+  reporterIp String?
   createdAt  DateTime @default(now())
+  expiresAt  DateTime
   profile    Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@index([profileId])
   @@index([profileId, createdAt(sort: Desc)])
+  @@index([expiresAt])
   @@map("profile_reports")
 }

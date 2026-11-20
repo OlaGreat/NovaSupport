@@ -12,6 +12,12 @@ export const metadata: Metadata = {
       "Learn how NovaSupport handles your data on the Stellar-native creator support platform.",
     type: "website",
   },
+  twitter: {
+    card: "summary",
+    title: "Privacy Policy · NovaSupport",
+    description:
+      "Learn how NovaSupport handles your data on the Stellar-native creator support platform.",
+  },
 };
 
 export default function PrivacyPage() {
@@ -27,7 +33,7 @@ export default function PrivacyPage() {
 
         <Section title="1. Introduction">
           <p>
-            NovaSupport ("we", "our", or "us") operates the NovaSupport
+            NovaSupport (&quot;we&quot;, &quot;our&quot;, or &quot;us&quot;) operates the NovaSupport
             platform, a Stellar-native creator support service. This Privacy
             Policy explains what personal data we collect, why we collect it,
             how we use it, and the rights you have regarding your information.
@@ -89,8 +95,11 @@ export default function PrivacyPage() {
           </h3>
           <ul className="list-disc pl-6 space-y-1 mt-1">
             <li>
-              IP addresses — used transiently for rate limiting and abuse
-              prevention; not linked to your profile and not stored long-term.
+              IP addresses — used transiently for rate limiting; not linked to
+              your profile and not stored long-term. When you submit a profile
+              report, the reporter&apos;s IP address is additionally retained
+              for up to 90 days to support abuse investigations, then
+              automatically purged.
             </li>
             <li>
               HTTP request logs — retained for up to 30 days for security and
@@ -201,8 +210,8 @@ export default function PrivacyPage() {
               inaccurate personal data via your profile settings.
             </li>
             <li>
-              <strong className="text-white/80">Erasure ("right to be
-              forgotten")</strong> — request deletion of your profile and
+              <strong className="text-white/80">Erasure (&quot;right to be
+              forgotten&quot;)</strong> — request deletion of your profile and
               off-chain data. Note that on-chain transaction data cannot be
               erased from the Stellar blockchain.
             </li>
@@ -253,7 +262,7 @@ export default function PrivacyPage() {
         <Section title="10. Changes to This Policy">
           <p>
             We may update this Privacy Policy periodically. Changes will be
-            posted on this page with an updated "Last updated" date. Continued
+            posted on this page with an updated &quot;Last updated&quot; date. Continued
             use of the Platform after changes constitutes acceptance of the
             revised Policy.
           </p>

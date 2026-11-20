@@ -4,7 +4,8 @@ import { TransactionResultModal } from "../transaction-result-modal";
 
 const TX_HASH = "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890ab";
 
-vi.mock("@/lib/stellar", () => ({
+vi.mock("@/lib/stellar", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/stellar")>()),
   stellarConfig: { horizonUrl: "https://horizon-testnet.stellar.org" },
   withStellarRetry: vi.fn(async (fn: () => Promise<unknown>) => fn()),
 }));
@@ -110,8 +111,10 @@ describe("TransactionResultModal", () => {
 
     render(<TransactionResultModal {...defaultProps} />);
 
+    // Exact match: the status label is "Failed", while the message below it
+    // ("Transaction failed on-chain.") would also match a loose /Failed/i.
     await waitFor(
-      () => expect(screen.getByText(/Failed/i)).toBeInTheDocument(),
+      () => expect(screen.getByText("Failed")).toBeInTheDocument(),
       { timeout: 5000 },
     );
     expect(screen.getByText(/Transaction failed on-chain/i)).toBeInTheDocument();

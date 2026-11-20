@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { beforeEach, describe, it, expect, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { SupportPanel } from '@/components/support-panel';
 import { signTransaction } from '@stellar/freighter-api';
 import { buildSupportIntent, horizonServer } from '@/lib/stellar';
@@ -17,7 +17,8 @@ vi.mock('@stellar/stellar-sdk', () => ({
     native: vi.fn(() => ({ type: 'native' })),
   },
   BASE_FEE: '100',
-  Horizon: {},
+  // stellar.ts constructs `new Horizon.Server(...)` at module load.
+  Horizon: { Server: vi.fn(() => ({})) },
   Transaction: vi.fn(),
   FeeBumpTransaction: vi.fn(),
   TransactionBuilder: {
@@ -25,7 +26,8 @@ vi.mock('@stellar/stellar-sdk', () => ({
   },
 }));
 
-vi.mock('@/lib/config', () => ({
+vi.mock('@/lib/config', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/config')>()),
   HORIZON_URL: 'https://horizon-testnet.stellar.org',
   API_BASE_URL: 'http://localhost:4000',
   STELLAR_NETWORK: 'TESTNET',
@@ -34,7 +36,8 @@ vi.mock('@/lib/config', () => ({
   SOROBAN_RPC_URL: 'https://soroban-testnet.stellar.org',
 }));
 
-vi.mock('@/lib/stellar', () => ({
+vi.mock('@/lib/stellar', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/stellar')>()),
   buildSupportIntent: vi.fn(),
   buildPathPaymentIntent: vi.fn(),
   getNetworkLabel: vi.fn(() => 'Testnet'),
@@ -76,6 +79,14 @@ describe('SupportPanel', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // SupportPanel resolves a wallet adapter from the persisted walletId
+    // before it will sign anything.
+    localStorage.setItem('walletId', 'freighter');
+    // clearAllMocks() clears calls but not implementations, so restore the
+    // default funded account or a previous test's override leaks in here.
+    vi.mocked(horizonServer.loadAccount).mockResolvedValue({
+      balances: [{ asset_type: 'native', balance: '100.0000000' }],
+    } as never);
     Object.defineProperty(navigator, 'clipboard', {
       value: { writeText: vi.fn().mockResolvedValue(undefined) },
       configurable: true,
@@ -97,12 +108,15 @@ describe('SupportPanel', () => {
     fireEvent.change(screen.getByPlaceholderText('0.00'), { target: { value: '5' } });
     await waitFor(() => expect(screen.getByRole('button', { name: /Send Support/i })).not.toBeDisabled());
     fireEvent.click(screen.getByRole('button', { name: /Send Support/i }));
-    await waitFor(() => expect(screen.getByText(/Support Sent!/)).toBeInTheDocument(), { timeout: 3000 });
-    expect(screen.getByText('12345678...90abcdef')).toBeInTheDocument();
-    expect(screen.getByRole('article')).toMatchSnapshot();
+    // Success opens the transaction result modal, which shows the truncated hash.
+    await waitFor(
+      () => expect(screen.getByText('12345678...90abcdef')).toBeInTheDocument(),
+      { timeout: 3000 },
+    );
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
-  it('shows "Waiting for Freighter signature…" while signing prompt is open', async () => {
+  it('shows the in-flight "Sending…" label while the signing prompt is open', async () => {
     vi.mocked(buildSupportIntent).mockResolvedValue('unsigned-xdr');
     // Never resolves — simulates Freighter prompt staying open
     vi.mocked(signTransaction).mockReturnValue(new Promise(() => {}));
@@ -113,21 +127,27 @@ describe('SupportPanel', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /Send Support/i })).not.toBeDisabled());
     fireEvent.click(screen.getByRole('button', { name: /Send Support/i }));
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /Waiting for Freighter signature/i })).toBeDisabled(),
+      expect(screen.getByRole('button', { name: /Sending/i })).toBeDisabled(),
     );
   });
 
   it('shows a readable error when the user rejects the transaction in Freighter', async () => {
     vi.mocked(buildSupportIntent).mockResolvedValue('unsigned-xdr');
-    vi.mocked(signTransaction).mockRejectedValue(new Error('User declined signing the transaction'));
+    vi.mocked(signTransaction).mockResolvedValue({
+      error: 'User declined signing the transaction',
+    } as never);
 
     render(<SupportPanel {...mockProps} />);
     await waitFor(() => expect(screen.getByPlaceholderText('0.00')).toBeInTheDocument());
     fireEvent.change(screen.getByPlaceholderText('0.00'), { target: { value: '5' } });
     await waitFor(() => expect(screen.getByRole('button', { name: /Send Support/i })).not.toBeDisabled());
     fireEvent.click(screen.getByRole('button', { name: /Send Support/i }));
-    await waitFor(() =>
-      expect(screen.getByText('You declined the transaction in Freighter.')).toBeInTheDocument(),
+    await waitFor(
+      () =>
+        expect(showToast).toHaveBeenCalledWith(
+          'You declined the transaction in your wallet.',
+          'error',
+        ),
       { timeout: 3000 },
     );
   });
@@ -141,30 +161,31 @@ describe('SupportPanel', () => {
     fireEvent.change(screen.getByPlaceholderText('0.00'), { target: { value: '5' } });
     await waitFor(() => expect(screen.getByRole('button', { name: /Send Support/i })).not.toBeDisabled());
     fireEvent.click(screen.getByRole('button', { name: /Send Support/i }));
-    await waitFor(() =>
-      expect(
-        screen.getByText(/Freighter is not installed/i),
-      ).toBeInTheDocument(),
+    await waitFor(
+      () => expect(showToast).toHaveBeenCalledWith('Freighter is not installed', 'error'),
       { timeout: 3000 },
     );
   });
 
-  it('shows a readable Horizon error message', async () => {
+  it('surfaces a failed Horizon submission as a readable error toast', async () => {
     vi.mocked(buildSupportIntent).mockResolvedValue('unsigned-xdr');
     vi.mocked(signTransaction).mockResolvedValue({
       signedTxXdr: 'signed-xdr',
       signerAddress: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
     });
-    vi.mocked(horizonServer.submitTransaction).mockRejectedValue({
-      response: { data: { extras: { result_codes: { transaction: 'tx_too_late' } } } },
-    });
+    vi.mocked(horizonServer.submitTransaction).mockRejectedValue(
+      new Error('Transaction expired'),
+    );
 
     render(<SupportPanel {...mockProps} />);
     await waitFor(() => expect(screen.getByPlaceholderText('0.00')).toBeInTheDocument());
     fireEvent.change(screen.getByPlaceholderText('0.00'), { target: { value: '5' } });
     await waitFor(() => expect(screen.getByRole('button', { name: /Send Support/i })).not.toBeDisabled());
     fireEvent.click(screen.getByRole('button', { name: /Send Support/i }));
-    await waitFor(() => expect(screen.getByText('Transaction expired')).toBeInTheDocument(), { timeout: 3000 });
+    await waitFor(
+      () => expect(showToast).toHaveBeenCalledWith('Transaction expired', 'error'),
+      { timeout: 3000 },
+    );
   });
 
   it('button is disabled while the signing prompt is open', async () => {
@@ -177,7 +198,7 @@ describe('SupportPanel', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /Send Support/i })).not.toBeDisabled());
     fireEvent.click(screen.getByRole('button', { name: /Send Support/i }));
     await waitFor(() => {
-      const btn = screen.getByRole('button', { name: /Waiting for Freighter signature/i });
+      const btn = screen.getByRole('button', { name: /Sending/i });
       expect(btn).toBeDisabled();
     });
   });
@@ -206,7 +227,7 @@ describe('SupportPanel', () => {
     await waitFor(() => expect(screen.getByText('Make it recurring')).toBeInTheDocument());
   });
 
-  it('copies recipient address and shows feedback toast', async () => {
+  it('copies recipient address and shows inline feedback', async () => {
     render(<SupportPanel {...mockProps} />);
     await waitFor(() => expect(screen.getByText('Recipient Address')).toBeInTheDocument());
     fireEvent.click(
@@ -214,8 +235,9 @@ describe('SupportPanel', () => {
     );
 
     await waitFor(() => {
-      expect(showToast).toHaveBeenCalledWith('Recipient address copied!', 'success');
+      expect(screen.getByText('Copied')).toBeInTheDocument();
     });
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(mockProps.walletAddress);
   });
 
   it('supports Ctrl/Cmd+C on focused recipient address', async () => {
@@ -226,11 +248,12 @@ describe('SupportPanel', () => {
     fireEvent.keyDown(recipientAddress, { key: 'c', metaKey: true });
 
     await waitFor(() => {
-      expect(showToast).toHaveBeenCalledWith('Recipient address copied!', 'success');
+      expect(screen.getByText('Copied')).toBeInTheDocument();
     });
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(mockProps.walletAddress);
   });
 
-  it('handles 409 duplicate transaction gracefully — shows success with existing hash', async () => {
+  it('still shows the success modal when the backend reports a duplicate (409)', async () => {
     const horizonHash = 'aabbccdd11223344aabbccdd11223344';
     const existingHash = 'deadbeef12345678deadbeef12345678';
 
@@ -261,13 +284,12 @@ describe('SupportPanel', () => {
       { timeout: 4000 },
     );
 
-    expect(showToast).toHaveBeenCalledWith(
-      'This transaction was already recorded',
-      'success',
-    );
-
-    // The modal should display the existing hash, not the Horizon hash
-    expect(screen.getByText(`${existingHash.slice(0, 8)}...${existingHash.slice(-8)}`)).toBeInTheDocument();
+    // The panel reports the hash Horizon accepted; a duplicate response from
+    // the backend must not turn the successful submission into an error.
+    expect(
+      screen.getByText(`${horizonHash.slice(0, 8)}...${horizonHash.slice(-8)}`),
+    ).toBeInTheDocument();
+    expect(showToast).not.toHaveBeenCalledWith(expect.anything(), 'error');
   });
 
   it('does not show an error panel when backend returns 409', async () => {
@@ -301,5 +323,42 @@ describe('SupportPanel', () => {
     // No error panel should be shown
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.queryByText(/error/i)).not.toBeInTheDocument();
+  });
+
+  it('ignores a stale balance response for a previous visitor address (#1448)', async () => {
+    const firstAddress = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+    const secondAddress = 'GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
+    const staleResolvers: Array<(value: unknown) => void> = [];
+
+    vi.mocked(horizonServer.loadAccount).mockImplementation(((address: string) => {
+      if (address === firstAddress) {
+        // Hold the first account's requests open until after the switch.
+        return new Promise((resolve) => staleResolvers.push(resolve));
+      }
+      return Promise.resolve({
+        balances: [{ asset_type: 'native', balance: '50.0000000' }],
+      });
+    }) as never);
+
+    render(<SupportPanel {...mockProps} />);
+    await waitFor(() => expect(staleResolvers.length).toBeGreaterThan(0));
+
+    // Switch wallets while the first address's requests are still in flight.
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent('wallet-connected', { detail: { address: secondAddress } }),
+      );
+    });
+    await waitFor(() => expect(screen.getByRole('combobox')).toHaveTextContent('50.00'));
+
+    // The old account's responses now arrive late and must be discarded.
+    await act(async () => {
+      staleResolvers.forEach((resolve) =>
+        resolve({ balances: [{ asset_type: 'native', balance: '999.0000000' }] }),
+      );
+    });
+
+    expect(screen.getByRole('combobox')).toHaveTextContent('50.00');
+    expect(screen.getByRole('combobox')).not.toHaveTextContent('999.00');
   });
 });

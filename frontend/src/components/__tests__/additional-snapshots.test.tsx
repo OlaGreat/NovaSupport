@@ -1,19 +1,40 @@
+import React from "react";
 import { describe, it, expect, vi, beforeAll } from "vitest";
-import { render, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { ThemeToggle } from "../theme-toggle";
 import { MilestoneCard } from "../milestone-card";
 import { EmbedWidget } from "../embed-widget";
 import { ActivityFeed } from "../activity-feed";
 import { NotificationPreferences } from "../notification-preferences";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-vi.mock("framer-motion", () => ({
-  motion: {
-    div: ({ children, ...props }: any) => <div {...props}>{children}</div>,
-  },
-  AnimatePresence: ({ children }: any) => <>{children}</>,
-}));
+function renderWithQueryClient(ui: React.ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>,
+  );
+}
 
-vi.mock("lucide-react", () => ({
+vi.mock("framer-motion", () => {
+  // Passthrough for any motion.<element>, not just the handful used today.
+  const motion = new Proxy(
+    {},
+    {
+      get: (_target, tag: string) => {
+        const Passthrough = ({ children, ...props }: any) =>
+          React.createElement(tag, props, children);
+        Passthrough.displayName = `motion.${tag}`;
+        return Passthrough;
+      },
+    },
+  );
+  return { motion, AnimatePresence: ({ children }: any) => children };
+});
+
+vi.mock("lucide-react", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("lucide-react")>()),
   TrendingUp: () => <span>TrendingUp</span>,
   Send: () => <span>Send</span>,
   Award: () => <span>Award</span>,
@@ -30,7 +51,8 @@ vi.mock("next/link", () => ({
   default: ({ children, href }: any) => <a href={href}>{children}</a>,
 }));
 
-vi.mock("@/lib/config", () => ({
+vi.mock("@/lib/config", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/config")>()),
   SITE_URL: "https://novasupport.app",
   API_BASE_URL: "http://localhost:4000",
 }));
@@ -88,8 +110,34 @@ describe("Additional Component Snapshots", () => {
       status: "reached",
       createdAt: "2024-01-01T00:00:00.000Z",
     };
-    const { container } = render(<MilestoneCard milestone={milestone} index={1} />);
-    expect(container).toMatchSnapshot();
+    // A reached milestone renders a confetti burst whose particle sizes and
+    // colours come from Math.random(), so pin it to keep the snapshot stable.
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.42);
+    try {
+      const { container } = render(<MilestoneCard milestone={milestone} index={1} />);
+      expect(container).toMatchSnapshot();
+    } finally {
+      randomSpy.mockRestore();
+    }
+  });
+
+  it("MilestoneCard renders zero progress when the current amount is malformed", () => {
+    render(
+      <MilestoneCard
+        milestone={{
+          id: "malformed",
+          title: "Malformed amount",
+          targetAmount: "100",
+          currentAmount: "invalid",
+          assetCode: "XLM",
+          status: "active",
+          createdAt: "2024-01-01T00:00:00.000Z",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("0%")).toBeInTheDocument();
+    expect(screen.queryByText("NaN%")).not.toBeInTheDocument();
   });
 
   it("EmbedWidget matches snapshot (dark theme, minimal props)", () => {
@@ -135,9 +183,60 @@ describe("Additional Component Snapshots", () => {
     expect(container).toMatchSnapshot();
   });
 
+  it("EmbedWidget renders stats when asset totals are omitted", () => {
+    render(
+      <EmbedWidget
+        username="johndoe"
+        displayName="John Doe"
+        bio="Stellar developer"
+        acceptedAssets={[{ code: "XLM" }]}
+        stats={{ totalTransactions: 1, uniqueSupporters: 1 }}
+        profileUrl="https://novasupport.app/johndoe"
+      />,
+    );
+
+    expect(screen.getByText("Transactions")).toBeInTheDocument();
+    expect(screen.getByText("Supporters")).toBeInTheDocument();
+  });
+
   it("ActivityFeed matches snapshot (loading state)", () => {
-    const { container } = render(<ActivityFeed username="johndoe" limit={5} />);
+    const { container } = renderWithQueryClient(<ActivityFeed username="johndoe" limit={5} />);
     expect(container).toMatchSnapshot();
+  });
+
+  it("ActivityFeed matches snapshot (with loaded data)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            transactions: [
+              {
+                id: "tx1",
+                amount: "100.0000000",
+                assetCode: "XLM",
+                status: "SUCCESS",
+                createdAt: "2024-01-15T10:30:00Z",
+                supporterAddress: "GCZJM35NKGVK47BB4SPBDV25477PZYIYPVVG453LPYFNXLS3FGHDXOCM",
+              },
+            ],
+          }),
+        } as unknown as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ milestones: [] }),
+        } as unknown as Response),
+    );
+
+    const { container } = renderWithQueryClient(<ActivityFeed username="johndoe" limit={5} />);
+
+    await waitFor(() => {
+      expect(container).toHaveTextContent("Received 100.0000000 XLM");
+    });
+
+    // Restore the original never-resolving mock for subsequent tests
+    vi.stubGlobal("fetch", vi.fn().mockReturnValue(new Promise(() => {})));
   });
 
   it("NotificationPreferences matches snapshot (no auth token)", () => {
@@ -157,7 +256,7 @@ describe("Additional Component Snapshots", () => {
         .mockRejectedValueOnce(new Error("Network error")),
     );
 
-    const { container } = render(<ActivityFeed username="johndoe" limit={5} />);
+    const { container } = renderWithQueryClient(<ActivityFeed username="johndoe" limit={5} />);
 
     await waitFor(() => {
       expect(container.textContent).toContain("Milestone data could not be loaded");

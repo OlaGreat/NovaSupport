@@ -1,4 +1,4 @@
-"use client";
+ "use client";
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
@@ -7,8 +7,8 @@ import { AppShell } from "@/components/app-shell";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { API_BASE_URL } from "@/lib/config";
 import { apiFetch } from "@/lib/api-client";
-import { stellarExpertUrl } from "@/lib/stellar";
-import { getWalletAdapter, type WalletId } from "@/lib/wallet-adapters";
+import { getStoredWalletAddress } from "@/lib/wallet-adapters";
+import { getDominantAssetCode, type AssetAmount } from "@/lib/assets";
 import {
   AreaChart,
   Area,
@@ -32,6 +32,7 @@ import {
   Info,
 } from "lucide-react";
 import { motion } from "framer-motion";
+import { formatRateLimitedMessage, parseRateLimitInfo } from "@/lib/rate-limit";
 
 interface AnalyticsData {
   summary: {
@@ -41,7 +42,6 @@ interface AnalyticsData {
     activeDrips: number;
   };
   dailyContributions: { date: string; amount: number }[];
-  assetBreakdown: { name: string; value: number }[];
   recentTransactions: {
     id: string;
     type: string;
@@ -57,16 +57,6 @@ type ProfileSettings = {
   email?: string | null;
   emailVerified?: boolean;
   notifyOnSupport?: boolean;
-};
-
-type TransactionCsvRow = {
-  createdAt: string;
-  amount: string;
-  assetCode: string;
-  supporterAddress: string;
-  message: string;
-  status: string;
-  txHash: string;
 };
 
 type ChartPoint = {
@@ -140,9 +130,6 @@ function normalizeAnalyticsResponse(json: unknown): AnalyticsData {
   const dailySource = (payload.dailyContributions ??
     payload.daily_contributions ??
     []) as unknown[];
-  const assetSource = (payload.assetBreakdown ??
-    payload.asset_breakdown ??
-    []) as unknown[];
   const txSource = (payload.recentTransactions ??
     payload.recent_transactions ??
     payload.transactions ??
@@ -182,18 +169,6 @@ function normalizeAnalyticsResponse(json: unknown): AnalyticsData {
         amount: toNumber(item.amount ?? item.totalAmount ?? item.total_amount),
       };
     }),
-    assetBreakdown: assetSource.map((entry) => {
-      const item = entry as Record<string, unknown>;
-      return {
-        name: toString(
-          item.name ?? item.assetCode ?? item.asset_code,
-          "Unknown",
-        ),
-        value: toNumber(
-          item.value ?? item.amount ?? item.totalAmount ?? item.total_amount,
-        ),
-      };
-    }),
     recentTransactions: txSource.map((entry, index) => {
       const item = entry as Record<string, unknown>;
       const txType = toString(
@@ -216,7 +191,7 @@ function normalizeAnalyticsResponse(json: unknown): AnalyticsData {
         type: txType,
         user: supporter,
         asset: toString(item.asset ?? item.assetCode ?? item.asset_code, "XLM"),
-        amount: amountValue.toString(),
+        amount: amountValue.toFixed(7).replace(/\.?0+$/, "") || "0",
         age: timeAgo(createdAt),
       };
     }),
@@ -256,56 +231,6 @@ function normalizeTimeseriesResponse(json: unknown): ChartPoint[] {
   });
 }
 
-function csvEscape(value: string): string {
-  const escaped = value.replace(/"/g, '""');
-  return `"${escaped}"`;
-}
-
-function downloadCsv(rows: TransactionCsvRow[]): void {
-  const headers = [
-    "Date",
-    "Amount",
-    "Asset",
-    "From Address",
-    "Message",
-    "Status",
-    "TX Hash",
-    "Stellar Expert URL",
-  ];
-  const lines = rows.map((row) => {
-    const expertUrl = stellarExpertUrl("tx", row.txHash);
-    return [
-      new Date(row.createdAt).toISOString(),
-      row.amount,
-      row.assetCode,
-      row.supporterAddress,
-      row.message,
-      row.status,
-      row.txHash,
-      expertUrl,
-    ]
-      .map(csvEscape)
-      .join(",");
-  });
-
-  const csv = `${headers.join(",")}\n${lines.join("\n")}`;
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "novasupport-transactions.csv";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
-type AssetBreakdownEntry = {
-  assetCode: string;
-  amount: number;
-  percentage: number;
-};
-
 type RecurringDrip = {
   id: string;
   profileId?: string;
@@ -325,7 +250,7 @@ export default function DashboardPage() {
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [settings, setSettings] = useState<ProfileSettings | null>(null);
   const [chartData, setChartData] = useState<ChartPoint[]>([]);
-  const [assetBreakdown, setAssetBreakdown] = useState<AssetBreakdownEntry[]>(
+  const [assetBreakdown, setAssetBreakdown] = useState<AssetAmount[]>(
     [],
   );
   const [selectedPeriod, setSelectedPeriod] = useState<ChartRange>("30D");
@@ -344,10 +269,6 @@ export default function DashboardPage() {
   >("success");
   const [drips, setDrips] = useState<RecurringDrip[]>([]);
   const [dripsLoading, setDripsLoading] = useState(true);
-  const [dripActionLoading, setDripActionLoading] = useState<string | null>(
-    null,
-  );
-  const [dripActionError, setDripActionError] = useState<string | null>(null);
   const [trends, setTrends] = useState({
     totalRaised: "—",
     totalRaisedPositive: true,
@@ -381,8 +302,7 @@ export default function DashboardPage() {
 
         if (assetsRes.ok) {
           const assetsJson = (await assetsRes.json()) as {
-            breakdown: AssetBreakdownEntry[];
-            total: number;
+            breakdown: AssetAmount[];
           };
           setAssetBreakdown(assetsJson.breakdown ?? []);
         }
@@ -433,27 +353,29 @@ export default function DashboardPage() {
     };
   }, [username, selectedPeriod]);
 
-  // #811: Use the wallet-adapter path so Albedo and Lobstr users also get
-  // their address resolved and isOwner evaluated correctly.
+  // Re-read the connected wallet whenever it changes so ownership updates
+  // without a reload (#1288). WalletConnect dispatches wallet-connected /
+  // wallet-disconnected in this tab; `storage` covers changes from other tabs.
   useEffect(() => {
-    async function resolveConnectedWallet() {
-      try {
-        const walletId =
-          typeof window !== "undefined"
-            ? (localStorage.getItem("walletId") as WalletId | null)
-            : null;
-        const adapter = walletId ? getWalletAdapter(walletId) : undefined;
-        if (!adapter) {
-          setConnectedWallet("");
-          return;
-        }
-        const address = await adapter.connect().catch(() => "");
-        setConnectedWallet(address);
-      } catch {
-        setConnectedWallet("");
+    function syncConnectedWallet() {
+      setConnectedWallet(getStoredWalletAddress() ?? "");
+    }
+
+    function handleStorage(event: StorageEvent) {
+      if (event.key === null || event.key === "walletAddress") {
+        syncConnectedWallet();
       }
     }
-    resolveConnectedWallet();
+
+    syncConnectedWallet();
+    window.addEventListener("wallet-connected", syncConnectedWallet);
+    window.addEventListener("wallet-disconnected", syncConnectedWallet);
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener("wallet-connected", syncConnectedWallet);
+      window.removeEventListener("wallet-disconnected", syncConnectedWallet);
+      window.removeEventListener("storage", handleStorage);
+    };
   }, []);
 
   // Fetch two consecutive 30-day periods and compute period-over-period trends (#517)
@@ -544,13 +466,20 @@ export default function DashboardPage() {
     let cancelled = false;
 
     async function fetchDrips() {
+      // Only the profile owner may see this profile's drips. Without a
+      // profileId the endpoint falls back to the viewer's own pledges, which
+      // must never be rendered on someone else's dashboard.
+      if (!isOwner) {
+        setDrips([]);
+        setDripsLoading(false);
+        return;
+      }
+
       setDripsLoading(true);
       try {
-        const endpoint = isOwner
-          ? `${API_BASE_URL}/recurring-support?profileId=${username}`
-          : `${API_BASE_URL}/recurring-support`;
-
-        const res = await apiFetch(endpoint);
+        const res = await apiFetch(
+          `${API_BASE_URL}/v1/recurring-support?profileId=${encodeURIComponent(username)}`,
+        );
 
         if (!cancelled) {
           if (res.ok) {
@@ -574,30 +503,6 @@ export default function DashboardPage() {
     };
   }, [username, isOwner]);
 
-  async function handleDripAction(id: string, action: "paused" | "cancelled") {
-    setDripActionLoading(id);
-    setDripActionError(null);
-    try {
-      const res = await apiFetch(`${API_BASE_URL}/recurring-support/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: action }),
-      });
-      if (res.ok) {
-        setDrips((prev) => prev.filter((d) => d.id !== id));
-      } else {
-        const body = await res.json().catch(() => ({})) as Record<string, unknown>;
-        setDripActionError(
-          typeof body.error === "string" ? body.error : `Failed to ${action} drip`,
-        );
-      }
-    } catch {
-      setDripActionError("Connection error — please try again");
-    } finally {
-      setDripActionLoading(null);
-    }
-  }
-
   async function handleDownloadCsv() {
     if (!isOwner) return;
     setCsvLoading(true);
@@ -605,7 +510,13 @@ export default function DashboardPage() {
       const res = await apiFetch(
         `${API_BASE_URL}/profiles/${username}/transactions/csv`,
       );
-      if (!res.ok) throw new Error("Failed to fetch transaction CSV");
+      if (!res.ok) {
+        const rateLimitInfo = parseRateLimitInfo(res.headers);
+        if (rateLimitInfo) {
+          throw new Error(formatRateLimitedMessage(rateLimitInfo));
+        }
+        throw new Error("Failed to download CSV");
+      }
       const csv = await res.text();
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
@@ -753,7 +664,7 @@ export default function DashboardPage() {
                     type="button"
                     onClick={handleResendVerification}
                     disabled={resendingVerification}
-                    className="inline-flex min-h-[36px] items-center justify-center rounded-xl border border-yellow-500/40 bg-yellow-500/10 px-4 py-1.5 text-xs font-bold text-yellow-300 transition hover:bg-yellow-500/20 disabled:cursor-not-allowed disabled:opacity-60 shrink-0"
+                    className="inline-flex min-h-[36px] items-center justify-center rounded-xl border border-yellow-500/40 bg-yellow-500/10 px-4 py-1.5 text-xs font-bold text-yellow-300 transition hover:bg-yellow-500/20 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     {resendingVerification ? (
                       <span className="flex items-center gap-2">
@@ -789,13 +700,7 @@ export default function DashboardPage() {
             {/* #820: use dominant asset code instead of hardcoding XLM */}
             <StatCard
               title="Total Raised"
-              value={`${data.summary.totalRaised.toLocaleString()} ${
-                assetBreakdown.length > 0
-                  ? assetBreakdown.reduce((a, b) =>
-                      a.value >= b.value ? a : b
-                    ).name
-                  : "XLM"
-              }`}
+              value={`${data.summary.totalRaised.toLocaleString()} ${getDominantAssetCode(assetBreakdown)}`}
               icon={<Wallet className="text-mint" />}
               trend={trends.totalRaised}
               positive={trends.totalRaisedPositive}
@@ -809,13 +714,7 @@ export default function DashboardPage() {
             />
             <StatCard
               title="Avg. Support"
-              value={`${data.summary.avgContribution} ${
-                assetBreakdown.length > 0
-                  ? assetBreakdown.reduce((a, b) =>
-                      a.value >= b.value ? a : b
-                    ).name
-                  : "XLM"
-              }`}
+              value={`${data.summary.avgContribution.toLocaleString()} ${getDominantAssetCode(assetBreakdown)}`}
               icon={<TrendingUp className="text-gold" />}
               trend="—"
               positive={true}
@@ -974,8 +873,8 @@ export default function DashboardPage() {
                         dataKey="amount"
                         nameKey="assetCode"
                         label={(props) => {
-                          const entry = props as unknown as AssetBreakdownEntry;
-                          return `${entry.assetCode} ${entry.percentage}%`;
+                          const entry = props as unknown as AssetAmount;
+                          return entry.assetCode;
                         }}
                         labelLine={false}
                       >
@@ -1030,7 +929,7 @@ export default function DashboardPage() {
                   type="button"
                   onClick={handleDownloadCsv}
                   disabled={csvLoading}
-                  className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-mint/30 bg-mint/10 px-4 py-2 text-xs font-bold text-mint transition hover:bg-mint/20 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-mint/30 bg-mint/10 px-4 py-2 text-xs font-bold text-mint transition hover:bg-mint/20 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {csvLoading ? (
                     <span className="flex items-center gap-2">
@@ -1138,7 +1037,8 @@ export default function DashboardPage() {
               )}
             </section>
           )}
-          {/* Recurring Drips */}
+          {/* Recurring Drips — owner only */}
+          {isOwner && (
           <section className="rounded-3xl border border-white/10 bg-white/5 p-6">
             <div className="mb-6 flex items-center justify-between">
               <h3 className="text-sm font-semibold uppercase tracking-widest text-steel font-mono">
@@ -1167,37 +1067,20 @@ export default function DashboardPage() {
               </div>
             ) : drips.length === 0 ? (
               <p className="py-8 text-center text-sm text-steel">
-                No active drips{isOwner ? " set up for this profile" : ""}.
+                No active drips set up for this profile.
               </p>
             ) : (
-              <>
-                {dripActionError && (
-                  <p className="mb-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-xs text-red-400">
-                    {dripActionError}
-                  </p>
-                )}
               <div className="space-y-3">
                 {drips.map((drip) => (
                   <div
                     key={drip.id}
                     className="flex flex-wrap items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.02] p-4"
                   >
-                    {isOwner ? (
-                      <>
-                        <span className="min-w-0 flex-1 font-mono text-xs text-sky/80">
-                          {drip.supporterAddress
-                            ? `${drip.supporterAddress.slice(0, 6)}...${drip.supporterAddress.slice(-4)}`
-                            : "Unknown"}
-                        </span>
-                      </>
-                    ) : (
-                      <Link
-                        href={`/profile/${drip.profileUsername}`}
-                        className="min-w-0 flex-1 text-sm font-semibold text-white hover:text-mint transition-colors"
-                      >
-                        {drip.profileDisplayName ?? drip.profileUsername}
-                      </Link>
-                    )}
+                    <span className="min-w-0 flex-1 font-mono text-xs text-sky/80">
+                      {drip.supporterAddress
+                        ? `${drip.supporterAddress.slice(0, 6)}...${drip.supporterAddress.slice(-4)}`
+                        : "Unknown"}
+                    </span>
                     <span className="text-sm font-bold text-white">
                       {parseFloat(drip.amount).toLocaleString()}{" "}
                       {drip.assetCode}
@@ -1208,32 +1091,12 @@ export default function DashboardPage() {
                     <span className="text-xs text-sky/60">
                       Next: {new Date(drip.nextRunAt).toLocaleDateString()}
                     </span>
-                    {!isOwner && (
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleDripAction(drip.id, "paused")}
-                          disabled={dripActionLoading === drip.id}
-                          className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-sky/70 transition hover:bg-white/10 disabled:opacity-50"
-                        >
-                          {dripActionLoading === drip.id ? "..." : "Pause"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDripAction(drip.id, "cancelled")}
-                          disabled={dripActionLoading === drip.id}
-                          className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-400 transition hover:bg-red-500/20 disabled:opacity-50"
-                        >
-                          {dripActionLoading === drip.id ? "..." : "Cancel"}
-                        </button>
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>
-              </>
             )}
           </section>
+          )}
         </div>
       </AppShell>
     </ErrorBoundary>

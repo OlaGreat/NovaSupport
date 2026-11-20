@@ -1,6 +1,35 @@
 import type { Request, Response, NextFunction } from "express";
 import sanitizeHtml from "sanitize-html";
+import { BlockList, isIP } from "node:net";
 import { logger } from "../logger.js";
+import { validatePublicUrl } from "../utils/url-validator.js";
+
+const PRIVATE_IP_RANGES = new BlockList();
+PRIVATE_IP_RANGES.addSubnet("0.0.0.0", 8, "ipv4");
+PRIVATE_IP_RANGES.addSubnet("127.0.0.0", 8, "ipv4");
+PRIVATE_IP_RANGES.addSubnet("10.0.0.0", 8, "ipv4");
+PRIVATE_IP_RANGES.addSubnet("172.16.0.0", 12, "ipv4");
+PRIVATE_IP_RANGES.addSubnet("192.168.0.0", 16, "ipv4");
+PRIVATE_IP_RANGES.addSubnet("169.254.0.0", 16, "ipv4");
+PRIVATE_IP_RANGES.addSubnet("::1", 128, "ipv6");
+PRIVATE_IP_RANGES.addSubnet("::", 128, "ipv6");
+PRIVATE_IP_RANGES.addSubnet("fc00::", 7, "ipv6");
+PRIVATE_IP_RANGES.addSubnet("fe80::", 10, "ipv6");
+
+function isPrivateHostname(hostname: string): boolean {
+  if (hostname === "localhost") return true;
+
+  const address = hostname.replace(/^\[|\]$/g, "");
+  const family = isIP(address);
+  if (family === 0) return false;
+
+  if (family === 6) {
+    const mapped = address.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
+    if (mapped) return PRIVATE_IP_RANGES.check(mapped[1], "ipv4");
+  }
+
+  return PRIVATE_IP_RANGES.check(address, family === 4 ? "ipv4" : "ipv6");
+}
 
 const STRIP_ALL_HTML: sanitizeHtml.IOptions = {
   allowedTags: [],
@@ -15,19 +44,20 @@ const SAFE_HTML: sanitizeHtml.IOptions = {
 };
 
 // Free-text user content fields where HTML should be stripped to prevent stored XSS
+// NOTE: Only fields present in Prisma schema / Zod schemas / route handlers.
+// Unused placeholders (social handles beyond twitter/github, contact/notification
+// emails, generic text/content/notes/tags/link keys) were removed to keep the
+// allowlist drift-free (see #1364).
 const HTML_CONTENT_FIELDS = new Set([
   "bio",
   "message",
+  "memo",
+  "details",
   "description",
   "displayName",
   "title",
   "name",
-  "text",
-  "content",
-  "notes",
   "username",
-  "tags_item", // For array items in query params
-  "tags", // For direct tags field
 ]);
 
 // URL fields that should be normalized and validated
@@ -36,30 +66,23 @@ const URL_FIELDS = new Set([
   "avatarUrl",
   "webhookUrl",
   "url",
-  "link",
 ]);
 
 // Social handle fields that need special validation
 const SOCIAL_HANDLE_FIELDS = new Set([
   "twitterHandle",
   "githubHandle",
-  "linkedinHandle",
-  "discordHandle",
 ]);
 
 // Email fields that need validation
 const EMAIL_FIELDS = new Set([
   "email",
-  "contactEmail",
-  "notificationEmail",
 ]);
 
 // Fields that should be converted to lowercase
 const LOWERCASE_FIELDS = new Set([
   "username",
   "email",
-  "contactEmail",
-  "notificationEmail",
 ]);
 
 // Maximum lengths for different field types
@@ -68,6 +91,9 @@ const MAX_LENGTHS = {
   message: 280,
   description: 1000,
   displayName: 64,
+  // "name" is HTML-stripped like displayName and holds the same kind of
+  // value, so it gets the same cap (#1521).
+  name: 64,
   title: 200,
   username: 32,
   twitterHandle: 15,
@@ -130,13 +156,7 @@ function normalizeUrl(value: string): { url: string | null; violations: string[]
 
     // Block localhost and private IPs for security
     const hostname = url.hostname.toLowerCase();
-    if (
-      hostname === "localhost" ||
-      hostname.startsWith("127.") ||
-      hostname.startsWith("192.168.") ||
-      hostname.startsWith("10.") ||
-      hostname.match(/^172\.(1[6-9]|2[0-9]|3[01])\./)
-    ) {
+    if (isPrivateHostname(hostname)) {
       violations.push("Private/local URLs are not allowed");
       return { url: null, violations };
     }
@@ -303,7 +323,7 @@ export function sanitizeString(
     }
 
     // Check for control characters (except newlines and tabs for some fields)
-    const allowNewlines = ["bio", "message", "description", "content"].includes(key);
+    const allowNewlines = ["bio", "message", "description"].includes(key);
     const controlCharRegex = allowNewlines ? /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g : /[\x00-\x08\x0B-\x1F\x7F]/g;
     if (controlCharRegex.test(result)) {
       violations.push("Control characters removed");
@@ -325,9 +345,29 @@ export function sanitizeString(
   };
 }
 
+/**
+ * The field whose rules apply to string items of an array named `fieldName`.
+ * A known field keeps its own rules (length cap, HTML stripping, URL/handle/
+ * email validation); anything else falls back to "message" so unknown array
+ * fields still get HTML stripping instead of silently bypassing XSS
+ * protection. Shared by request bodies and query strings (#1523).
+ */
+function arrayItemRulesKey(fieldName: string | undefined): string {
+  const isKnownField =
+    fieldName !== undefined &&
+    (HTML_CONTENT_FIELDS.has(fieldName) ||
+      URL_FIELDS.has(fieldName) ||
+      SOCIAL_HANDLE_FIELDS.has(fieldName) ||
+      EMAIL_FIELDS.has(fieldName) ||
+      LOWERCASE_FIELDS.has(fieldName) ||
+      (MAX_LENGTHS as Record<string, unknown>)[fieldName] !== undefined);
+  return isKnownField ? (fieldName as string) : "message";
+}
+
 export function sanitizeObject(
   obj: unknown,
   depth = 0,
+  parentKey?: string,
 ): { result: unknown; changed: boolean; violations: string[] } {
   const allViolations: string[] = [];
 
@@ -336,16 +376,16 @@ export function sanitizeObject(
   }
 
   if (Array.isArray(obj)) {
+    const itemKey = arrayItemRulesKey(parentKey);
     let changed = false;
     const result = obj.map((item, index) => {
       if (typeof item === "string") {
-        // Use a generic key so HTML sanitization still applies
-        const { result: r, changed: c, violations } = sanitizeString("message", item);
+        const { result: r, changed: c, violations } = sanitizeString(itemKey, item);
         if (c) changed = true;
         allViolations.push(...violations.map(v => `[${index}] ${v}`));
         return r;
       }
-      const { result: r, changed: c, violations } = sanitizeObject(item, depth + 1);
+      const { result: r, changed: c, violations } = sanitizeObject(item, depth + 1, parentKey);
       if (c) changed = true;
       allViolations.push(...violations.map(v => `[${index}] ${v}`));
       return r;
@@ -363,7 +403,7 @@ export function sanitizeObject(
         allViolations.push(...violations.map(v => `${key}: ${v}`));
         result[key] = r;
       } else {
-        const { result: r, changed: c, violations } = sanitizeObject(value, depth + 1);
+        const { result: r, changed: c, violations } = sanitizeObject(value, depth + 1, key);
         if (c) changed = true;
         allViolations.push(...violations.map(v => `${key}.${v}`));
         result[key] = r;
@@ -375,11 +415,11 @@ export function sanitizeObject(
   return { result: obj, changed: false, violations: allViolations };
 }
 
-export function sanitizeBody(
+export async function sanitizeBody(
   req: Request,
   _res: Response,
   next: NextFunction,
-): void {
+): Promise<void> {
   if (req.body && typeof req.body === "object") {
     const { result, changed, violations } = sanitizeObject(
       req.body as Record<string, unknown>,
@@ -397,6 +437,32 @@ export function sanitizeBody(
       );
       req.body = result;
     }
+
+    const urlChecks: Array<{ parent: Record<string, unknown>; key: string; value: string }> = [];
+    const collectUrls = (value: unknown): void => {
+      if (!value || typeof value !== "object") return;
+      if (Array.isArray(value)) {
+        value.forEach(collectUrls);
+        return;
+      }
+      for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+        if (typeof child === "string" && URL_FIELDS.has(key)) {
+          urlChecks.push({ parent: value as Record<string, unknown>, key, value: child });
+        } else {
+          collectUrls(child);
+        }
+      }
+    };
+    collectUrls(result);
+    for (const check of urlChecks) {
+      const violation = await validatePublicUrl(check.value);
+      if (violation) {
+        check.parent[check.key] = "";
+        violations.push(`${check.key}: ${violation}`);
+      }
+    }
+
+    req.body = result;
 
     // Log security violations separately for monitoring
     if (violations.length > 0) {
@@ -433,10 +499,14 @@ export function sanitizeQuery(
       if (fieldChanged) changed = true;
       violations.push(...fieldViolations.map(v => `${key}: ${v}`));
     } else if (Array.isArray(value)) {
+      // Repeated or array-shaped parameters (?tag=a&tag=b, ?tag[]=a) get the
+      // same per-field rules as a single value, with the same HTML-stripping
+      // fallback for unknown fields that request bodies use (#1523).
+      const itemKey = arrayItemRulesKey(key);
       const sanitizedArray: unknown[] = [];
       value.forEach((v, index) => {
         if (typeof v === "string") {
-          const { result, changed: itemChanged, violations: itemViolations } = sanitizeString(`${key}_item`, v);
+          const { result, changed: itemChanged, violations: itemViolations } = sanitizeString(itemKey, v);
           sanitizedArray.push(result);
           if (itemChanged) changed = true;
           violations.push(...itemViolations.map(viol => `${key}[${index}]: ${viol}`));

@@ -1,5 +1,11 @@
 // Prometheus-compatible metrics registry for background service health monitoring.
 // Exposes counters, gauges, and histograms in OpenMetrics text format.
+//
+// ⚠️  LIMITATION: This in-memory registry resets on process restart and is not
+// suitable for multi-instance deployments. Metric values reflect only the
+// current instance's state since last restart. For production deployments with
+// multiple instances or persistent monitoring, use a proper Prometheus client
+// library (e.g., prom-client) with persistent storage and cluster-aware aggregation.
 
 type MetricValue = number;
 

@@ -81,7 +81,9 @@ function ConfettiBurst() {
 export function MilestoneCard({ milestone, index = 0 }: MilestoneCardProps) {
   const current = parseFloat(milestone.currentAmount);
   const target = parseFloat(milestone.targetAmount);
-  const progress = target > 0 ? Math.min((current / target) * 100, 100) : 0;
+  const progress = Number.isFinite(current) && Number.isFinite(target) && target > 0
+    ? Math.min((current / target) * 100, 100)
+    : 0;
   const isReached = milestone.status === "reached" || progress >= 100;
 
   return (
@@ -168,7 +170,7 @@ export function MilestoneCard({ milestone, index = 0 }: MilestoneCardProps) {
             "font-medium tabular-nums",
             isReached ? "text-mint" : "text-steel"
           )}>
-            {current.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / {target.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{" "}
+            {current.toLocaleString(undefined, { maximumFractionDigits: 7 })} / {target.toLocaleString(undefined, { maximumFractionDigits: 7 })}{" "}
             <span className={cn(
               "font-semibold",
               isReached ? "text-mint" : "text-sky/60"
@@ -178,7 +180,7 @@ export function MilestoneCard({ milestone, index = 0 }: MilestoneCardProps) {
           </span>
 
           <motion.span
-            key={Math.round(progress)}
+            key={Math.round(progress * 100) / 100}
             initial={{ scale: 1.3 }}
             animate={{ scale: 1 }}
             className={cn(
@@ -187,7 +189,7 @@ export function MilestoneCard({ milestone, index = 0 }: MilestoneCardProps) {
             )}
           >
             {isReached && <Sparkles size={12} className="inline mr-1 text-gold" />}
-            {Math.round(progress)}%
+            {progress < 0.01 && progress > 0 ? progress.toFixed(4) : progress < 1 ? progress.toFixed(2) : Math.round(progress)}%
           </motion.span>
         </div>
       </div>

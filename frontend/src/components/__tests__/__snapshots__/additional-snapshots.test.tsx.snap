@@ -1,0 +1,796 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Additional Component Snapshots > ActivityFeed matches snapshot (loading state) 1`] = `
+<div>
+  <div
+    class="flex items-center justify-center py-12"
+  >
+    <div
+      class="space-y-4 w-full max-w-md"
+    >
+      <div
+        class="h-20 bg-white/5 rounded-lg animate-pulse border border-white/10"
+      />
+      <div
+        class="h-20 bg-white/5 rounded-lg animate-pulse border border-white/10"
+      />
+      <div
+        class="h-20 bg-white/5 rounded-lg animate-pulse border border-white/10"
+      />
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Additional Component Snapshots > EmbedWidget matches snapshot (dark theme, minimal props) 1`] = `
+<div>
+  <div
+    class="max-w-sm text-sm bg-[#0a0a0f] border border-white/10 rounded-2xl p-4 font-sans shadow-xl w-full"
+    data-size="medium"
+    data-theme="dark"
+  >
+    <div
+      class="flex items-center gap-3 mb-3"
+    >
+      <div
+        class="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold flex-shrink-0"
+      >
+        JO
+      </div>
+      <div
+        class="min-w-0"
+      >
+        <p
+          class="font-semibold truncate text-white"
+        >
+          John Doe
+        </p>
+        <p
+          class="text-white/50 truncate"
+        >
+          @
+          johndoe
+        </p>
+      </div>
+    </div>
+    <p
+      class="text-white/50 mb-3 line-clamp-2 leading-relaxed"
+    >
+      Stellar developer and content creator
+    </p>
+    <div
+      class="flex flex-wrap gap-1 mb-3 pb-3 border-b border-white/10"
+    >
+      <span
+        class="rounded-full border border-white/10 px-2 py-0.5 text-white/50"
+        style="font-size: 0.65rem;"
+      >
+        XLM
+      </span>
+    </div>
+    <a
+      class="block w-full text-center rounded-xl px-3 py-2 font-semibold transition-colors bg-[#00e5b0] text-[#0a0a0f] hover:bg-[#00c99a]"
+      href="https://novasupport.app/johndoe"
+      rel="noopener noreferrer"
+      target="_blank"
+    >
+      Support 
+      John Doe
+    </a>
+    <p
+      class="text-center mt-2 text-white/50"
+      style="font-size: 0.6rem;"
+    >
+      Powered by
+       
+      <a
+        class="text-[#00e5b0]"
+        href="https://novasupport.app"
+        rel="noopener noreferrer"
+        target="_blank"
+      >
+        NovaSupport
+      </a>
+    </p>
+  </div>
+</div>
+`;
+
+exports[`Additional Component Snapshots > EmbedWidget matches snapshot (light theme, with stats) 1`] = `
+<div>
+  <div
+    class="max-w-md text-sm bg-white border border-gray-200 rounded-2xl p-4 font-sans shadow-xl w-full"
+    data-size="large"
+    data-theme="light"
+  >
+    <div
+      class="flex items-center gap-3 mb-3"
+    >
+      <div
+        class="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold flex-shrink-0"
+      >
+        JO
+      </div>
+      <div
+        class="min-w-0"
+      >
+        <p
+          class="font-semibold truncate text-gray-900"
+        >
+          John Doe
+        </p>
+        <p
+          class="text-gray-500 truncate"
+        >
+          @
+          johndoe
+        </p>
+      </div>
+    </div>
+    <p
+      class="text-gray-500 mb-3 line-clamp-2 leading-relaxed"
+    >
+      Stellar developer
+    </p>
+    <div
+      class="flex gap-4 mb-3 pb-3 border-b border-gray-200"
+    >
+      <div>
+        <p
+          class="text-gray-500 uppercase tracking-wider"
+          style="font-size: 0.6rem;"
+        >
+          Supporters
+        </p>
+        <p
+          class="font-bold text-gray-900"
+        >
+          15
+        </p>
+      </div>
+      <div>
+        <p
+          class="text-gray-500 uppercase tracking-wider"
+          style="font-size: 0.6rem;"
+        >
+          Transactions
+        </p>
+        <p
+          class="font-bold text-gray-900"
+        >
+          42
+        </p>
+      </div>
+      <div>
+        <p
+          class="text-gray-500 uppercase tracking-wider"
+          style="font-size: 0.6rem;"
+        >
+          Total (
+          XLM
+          )
+        </p>
+        <p
+          class="font-bold text-indigo-600"
+        >
+          1,000
+        </p>
+      </div>
+    </div>
+    <div
+      class="mb-3"
+    >
+      <p
+        class="text-gray-500 uppercase tracking-wider mb-1"
+        style="font-size: 0.6rem;"
+      >
+        Recent Supporters
+      </p>
+      <div
+        class="space-y-1"
+      >
+        <div
+          class="flex items-center justify-between"
+        >
+          <span
+            class="font-mono text-gray-500"
+          >
+            GCZJ…XOCM
+          </span>
+          <span
+            class="font-semibold text-indigo-600"
+          >
+            100.0000000
+             
+            XLM
+          </span>
+        </div>
+      </div>
+    </div>
+    <div
+      class="flex flex-wrap gap-1 mb-3 pb-3 border-b border-gray-200"
+    >
+      <span
+        class="rounded-full border border-gray-200 px-2 py-0.5 text-gray-500"
+        style="font-size: 0.65rem;"
+      >
+        XLM
+      </span>
+      <span
+        class="rounded-full border border-gray-200 px-2 py-0.5 text-gray-500"
+        style="font-size: 0.65rem;"
+      >
+        USDC
+      </span>
+    </div>
+    <a
+      class="block w-full text-center rounded-xl px-3 py-2 font-semibold transition-colors bg-indigo-600 text-white hover:bg-indigo-700"
+      href="https://novasupport.app/johndoe"
+      rel="noopener noreferrer"
+      target="_blank"
+    >
+      Support 
+      John Doe
+    </a>
+    <p
+      class="text-center mt-2 text-gray-500"
+      style="font-size: 0.6rem;"
+    >
+      Powered by
+       
+      <a
+        class="text-indigo-600"
+        href="https://novasupport.app"
+        rel="noopener noreferrer"
+        target="_blank"
+      >
+        NovaSupport
+      </a>
+    </p>
+  </div>
+</div>
+`;
+
+exports[`Additional Component Snapshots > MilestoneCard matches snapshot (in-progress) 1`] = `
+<div>
+  <div
+    animate="[object Object]"
+    class="group relative rounded-2xl border p-4 sm:p-5 transition-colors duration-300 border-white/10 bg-white/5 hover:border-white/20"
+    initial="[object Object]"
+    transition="[object Object]"
+  >
+    <div
+      class="flex items-start justify-between gap-2 mb-3"
+    >
+      <div
+        class="flex-1 min-w-0"
+      >
+        <h4
+          class="text-sm font-semibold text-white truncate"
+        >
+          New Equipment Fund
+        </h4>
+        <p
+          class="text-xs text-steel mt-1 line-clamp-2"
+        >
+          Raising funds for recording gear
+        </p>
+      </div>
+      <div
+        class="flex-shrink-0"
+      >
+        <div
+          animate="[object Object]"
+          transition="[object Object]"
+        >
+          <span>
+            Target
+          </span>
+        </div>
+      </div>
+    </div>
+    <div
+      class="space-y-2"
+    >
+      <div
+        class="relative w-full h-2 rounded-full bg-white/5 overflow-hidden"
+      >
+        <div
+          animate="[object Object]"
+          class="h-full transition-colors duration-500 bg-gradient-to-r from-mint/80 to-mint"
+          initial="[object Object]"
+          transition="[object Object]"
+        />
+      </div>
+      <div
+        class="flex items-center justify-between text-xs"
+      >
+        <span
+          class="font-medium tabular-nums text-steel"
+        >
+          250.00
+           / 
+          1,000.00
+           
+          <span
+            class="font-semibold text-sky/60"
+          >
+            XLM
+          </span>
+        </span>
+        <span
+          animate="[object Object]"
+          class="font-bold tabular-nums text-steel"
+          initial="[object Object]"
+        >
+          25
+          %
+        </span>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Additional Component Snapshots > MilestoneCard matches snapshot (reached) 1`] = `
+<div>
+  <div
+    animate="[object Object]"
+    class="group relative rounded-2xl border p-4 sm:p-5 transition-colors duration-300 border-mint/30 bg-mint/[0.04] ring-1 ring-mint/10"
+    initial="[object Object]"
+    transition="[object Object]"
+  >
+    <div
+      class="absolute inset-0 pointer-events-none overflow-hidden"
+    >
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+      <div
+        animate="[object Object]"
+        class="absolute left-1/2 top-1/2 rounded-sm"
+        initial="[object Object]"
+        style="width: 7.359999999999999px; height: 5.52px; background-color: rgb(125, 211, 252);"
+        transition="[object Object]"
+      />
+    </div>
+    <div
+      class="absolute -top-2 -right-2 z-10"
+    >
+      <span
+        animate="[object Object]"
+        class="inline-flex items-center gap-1 rounded-full bg-mint px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-widest text-ink shadow-lg shadow-mint/30"
+        initial="[object Object]"
+        transition="[object Object]"
+      >
+        <span>
+          Trophy
+        </span>
+        Reached
+      </span>
+    </div>
+    <div
+      class="flex items-start justify-between gap-2 mb-3"
+    >
+      <div
+        class="flex-1 min-w-0"
+      >
+        <h4
+          class="text-sm font-semibold text-white truncate"
+        >
+          Goal Reached!
+        </h4>
+      </div>
+    </div>
+    <div
+      class="space-y-2"
+    >
+      <div
+        class="relative w-full h-2 rounded-full bg-white/5 overflow-hidden"
+      >
+        <div
+          animate="[object Object]"
+          class="h-full transition-colors duration-500 bg-gradient-to-r from-mint via-mint to-gold"
+          initial="[object Object]"
+          transition="[object Object]"
+        />
+        <div
+          animate="[object Object]"
+          class="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+          initial="[object Object]"
+          style="animation: shimmer 2s ease-in-out infinite;"
+          transition="[object Object]"
+        />
+      </div>
+      <div
+        class="flex items-center justify-between text-xs"
+      >
+        <span
+          class="font-medium tabular-nums text-mint"
+        >
+          600.00
+           / 
+          500.00
+           
+          <span
+            class="font-semibold text-mint"
+          >
+            XLM
+          </span>
+        </span>
+        <span
+          animate="[object Object]"
+          class="font-bold tabular-nums text-mint"
+          initial="[object Object]"
+        >
+          <span>
+            Sparkles
+          </span>
+          100
+          %
+        </span>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Additional Component Snapshots > NotificationPreferences matches snapshot (no auth token) 1`] = `
+<div>
+  <section
+    class="rounded-2xl border border-white/10 bg-white/5 p-6 space-y-4"
+  >
+    <div
+      class="h-4 w-48 rounded bg-white/10 animate-pulse"
+    />
+    <div
+      class="space-y-3"
+    >
+      <div
+        class="flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3"
+      >
+        <div
+          class="space-y-1.5"
+        >
+          <div
+            class="h-3.5 w-32 rounded bg-white/10 animate-pulse"
+          />
+          <div
+            class="h-2.5 w-56 rounded bg-white/5 animate-pulse"
+          />
+        </div>
+        <div
+          class="h-5 w-9 rounded-full bg-white/10 animate-pulse"
+        />
+      </div>
+      <div
+        class="flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3"
+      >
+        <div
+          class="space-y-1.5"
+        >
+          <div
+            class="h-3.5 w-32 rounded bg-white/10 animate-pulse"
+          />
+          <div
+            class="h-2.5 w-56 rounded bg-white/5 animate-pulse"
+          />
+        </div>
+        <div
+          class="h-5 w-9 rounded-full bg-white/10 animate-pulse"
+        />
+      </div>
+      <div
+        class="flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3"
+      >
+        <div
+          class="space-y-1.5"
+        >
+          <div
+            class="h-3.5 w-32 rounded bg-white/10 animate-pulse"
+          />
+          <div
+            class="h-2.5 w-56 rounded bg-white/5 animate-pulse"
+          />
+        </div>
+        <div
+          class="h-5 w-9 rounded-full bg-white/10 animate-pulse"
+        />
+      </div>
+    </div>
+  </section>
+</div>
+`;
+
+exports[`Additional Component Snapshots > ThemeToggle matches snapshot 1`] = `
+<div>
+  <button
+    aria-label="Switch to dark mode"
+    class="p-2 rounded-lg bg-ocean/50 hover:bg-ocean transition-colors text-sky"
+  >
+    <svg
+      class="w-5 h-5"
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+      />
+    </svg>
+  </button>
+</div>
+`;

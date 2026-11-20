@@ -43,16 +43,18 @@ Why this choice:
 
 ## Contract Responsibilities
 
-The Soroban contract is intentionally narrow in scope:
+The Soroban contract manages support actions and real token transfers:
 
 - accept a support action with recipient, asset info, amount, and optional message
-- emit an event that external services can index
+- perform real token transfers from supporter to contract, with balance validation
+- manage withdrawals where recipients can claim their accumulated support
+- emit events that external services can index
 - serve as a clean starting point for future escrow, milestones, or attestations
 
 Why this choice:
 
 - a small contract is easier to audit and extend during a submission sprint
-- event emission demonstrates real Soroban integration intent without overbuilding
+- real token custody and transfers provide transparent onchain support flow
 
 ## Technical Decisions
 
@@ -111,9 +113,8 @@ Supabase-hosted PostgreSQL was selected because:
 
 ## Contract Scope
 
-The current contract does not try to manage full token transfers yet. Instead it captures support intent and emits a structured event. This keeps the MVP understandable and gives the team a clear extension point for:
+The contract manages real token transfers and custody while maintaining a clean, understandable interface. This keeps the MVP focused and gives the team clear extension points for:
 
-- token transfer enforcement
 - onchain profile ownership
 - milestone-based releases
 - tipping or recurring support logic

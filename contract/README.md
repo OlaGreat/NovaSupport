@@ -23,7 +23,6 @@ Key error categories:
 - **Contract state errors** (200-299): Initialization, pause state
 - **Balance and transfer errors** (300-399): Insufficient funds, withdrawal limits
 - **Storage and data errors** (400-499): Missing data, recipient not found
-- **Asset and token errors** (500-599): Invalid assets, token client issues
 
 ## Why It Is Small
 
@@ -222,11 +221,11 @@ stellar contract invoke --network testnet-alt ...
 3. **Verify contract state:**
 
    ```bash
-   # Check if contract is initialized
-   stellar contract invoke --id <CONTRACT_ID> --network testnet -- is_initialized
+   # Check contract support count
+   stellar contract invoke --id <CONTRACT_ID> --network testnet -- support_count
 
-   # Check pause status
-   stellar contract invoke --id <CONTRACT_ID> --network testnet -- is_paused
+   # Check total by asset for a recipient
+   stellar contract invoke --id <CONTRACT_ID> --network testnet -- get_total_by_asset --r <RECIPIENT_ADDRESS> --asset <ASSET_ADDRESS>
    ```
 
 4. **Test with Stellar Laboratory:**
@@ -309,14 +308,15 @@ stellar contract invoke \
   --network testnet \
   --source mykey \
   -- support \
-  --supporter <SUPPORTER_ADDRESS> \
-  --recipient <RECIPIENT_ADDRESS> \
-  --amount 10000000 \
-  --asset_code XLM \
-  --message "Great work!"
+  --s <SUPPORTER_ADDRESS> \
+  --r <RECIPIENT_ADDRESS> \
+  --asset <ASSET_ADDRESS> \
+  --o 10000000 \
+  --c XLM \
+  --m "Great work!"
 ```
 
-**Note:** The `amount` is in stroops (1 XLM = 10,000,000 stroops).
+**Note:** The `amount` (`--o`) is in stroops (1 XLM = 10,000,000 stroops).
 
 ### JavaScript Example
 
@@ -351,6 +351,9 @@ const tx = new TransactionBuilder(account, {
         type: "address",
       }),
       nativeToScVal(Address.fromString("<RECIPIENT_ADDRESS>"), {
+        type: "address",
+      }),
+      nativeToScVal(Address.fromString("<ASSET_ADDRESS>"), {
         type: "address",
       }),
       nativeToScVal(10000000, { type: "i128" }), // amount in stroops
@@ -508,7 +511,7 @@ The table below shows simulated resource consumption across representative scena
 
 1. **Message length** — The `message` parameter is stored in contract arguments and validated on-chain. Longer messages increase instruction count and transaction size slightly.
 2. **Token transfer** — `token::Client::transfer()` is the most expensive single operation. It invokes the Stellar Asset Contract (SAC), which reads and writes ledger entries for both the supporter and the contract balances.
-3. **Storage TTL extension** — Every `support()` call extends TTL for `SupportCount`, `RecipientCount`, `RecipientTotal`, and `TotalByAsset` entries, adding four ledger write operations.
+3. **Storage TTL extension** — Every `support()` call extends TTL for `SupportCount`, `RecipientCount`, and `RecipientTotal` entries, adding three ledger write operations.
 4. **First-time recipient** — If the recipient has no prior transactions with this contract, two storage entries are created instead of updated, slightly increasing cost.
 5. **Network congestion** — During high-traffic periods, the Soroban fee market may require a higher base fee for timely inclusion. Resource fees are unaffected by congestion.
 6. **Protocol upgrades** — Soroban fee schedules are governed by validators and can change between protocol versions.

@@ -2,6 +2,7 @@
   "name": "novasupport-backend",
   "version": "0.1.0",
   "private": true,
+  "engines": { "node": ">=22.0.0" },
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -17,7 +18,7 @@
     "db:setup": "npm run db:generate && npm run db:migrate && npm run db:seed",
     "db:reset": "prisma migrate reset --force",
     "db:seed": "tsx prisma/seed.ts",
-    "lint": "eslint src/"
+    "lint": "eslint src/ --max-warnings=0"
   },
   "dependencies": {
     "@opentelemetry/auto-instrumentations-node": "0.60.1",
@@ -27,12 +28,14 @@
     "@sentry/node": "^8.55.2",
     "@stellar/stellar-sdk": "^14.6.1",
     "@supabase/supabase-js": "^2.100.1",
+    "bullmq": "^5.81.2",
     "compression": "^1.8.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
+    "ioredis": "^5.11.1",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.1.1",
     "nodemailer": "^6.9.16",

@@ -6,7 +6,7 @@ const analyticsCache = new Map<
   { data: any; timestamp: number }
 >();
 const CACHE_TTL = 3600000; // 1 hour
-const CACHE_MAX_SIZE = 1000;
+const CACHE_MAX_SIZE = 1000; // Maximum number of cache entries
 
 interface DailyContribution {
   date: string;
@@ -18,71 +18,6 @@ interface DailyContribution {
 
 function isCacheValid(timestamp: number): boolean {
   return Date.now() - timestamp < CACHE_TTL;
-}
-
-export function fillGaps(
-  results: any[],
-  period: string,
-  fromDate: Date,
-  toDate: Date
-) {
-  const map = new Map<string, any>();
-  for (const row of results) {
-    const d = new Date(row.date);
-    let key = "";
-    if (period === "monthly") {
-      key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
-    } else if (period === "weekly") {
-      const day = d.getDay();
-      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-      const monday = new Date(d.setDate(diff));
-      key = monday.toISOString().split("T")[0];
-    } else {
-      key = d.toISOString().split("T")[0];
-    }
-    map.set(key, {
-      amount: row.total?.toString() ?? "0",
-      count: Number(row.txCount ?? 0),
-      uniqueContributors: Number(row.uniqueContributors ?? 0),
-      avgContribution: row.avgContribution?.toString() ?? "0",
-    });
-  }
-
-  const data = [];
-  const current = new Date(fromDate);
-  if (period === "monthly") current.setDate(1);
-  if (period === "weekly") {
-    const day = current.getDay();
-    const diff = current.getDate() - day + (day === 0 ? -6 : 1);
-    current.setDate(diff);
-  }
-
-  const end = new Date(toDate);
-  // Normalize dates to midnight for comparison
-  current.setHours(0, 0, 0, 0);
-  end.setHours(0, 0, 0, 0);
-
-  while (current <= end) {
-    const keyStr = current.toISOString().split("T")[0];
-    const existing = map.get(keyStr);
-    data.push({
-      date: keyStr,
-      amount: existing?.amount ?? "0",
-      count: existing?.count ?? 0,
-      uniqueContributors: existing?.uniqueContributors ?? 0,
-      avgContribution: existing?.avgContribution ?? "0",
-    });
-
-    if (period === "monthly") {
-      current.setMonth(current.getMonth() + 1);
-    } else if (period === "weekly") {
-      current.setDate(current.getDate() + 7);
-    } else {
-      current.setDate(current.getDate() + 1);
-    }
-  }
-
-  return { period, data };
 }
 
 export async function getAnalytics(
@@ -118,29 +53,31 @@ export async function getAnalytics(
           to_char("createdAt", 'YYYY-MM-DD') AS date,
           SUM("amount")::text AS total,
           COUNT(*)::int AS "txCount",
-          COUNT(DISTINCT "supporterAddress")::int AS "uniqueContributors"
+          COUNT(DISTINCT "supporterAddress" FILTER (WHERE "supporterAddress" IS NOT NULL))::int AS "uniqueContributors"
         FROM "SupportTransaction"
         WHERE "profileId" = ${profileId}
           AND "createdAt" >= ${start}
           AND "createdAt" <= ${end}
+          AND "status" = 'SUCCESS'
         GROUP BY 1
         ORDER BY 1 ASC
       `,
       prisma.supportTransaction.aggregate({
-        where: { profileId, createdAt: { gte: start, lte: end } },
+        where: { profileId, status: "SUCCESS", createdAt: { gte: start, lte: end } },
         _sum: { amount: true },
         _count: true,
       }),
       prisma.$queryRaw<{ count: number }[]>`
-        SELECT COUNT(DISTINCT "supporterAddress")::int AS count
+        SELECT COUNT(DISTINCT "supporterAddress" FILTER (WHERE "supporterAddress" IS NOT NULL))::int AS count
         FROM "SupportTransaction"
         WHERE "profileId" = ${profileId}
           AND "createdAt" >= ${start}
           AND "createdAt" <= ${end}
+          AND "status" = 'SUCCESS'
       `,
       prisma.supportTransaction.groupBy({
         by: ["assetCode"],
-        where: { profileId, createdAt: { gte: start, lte: end } },
+        where: { profileId, status: "SUCCESS", createdAt: { gte: start, lte: end } },
         _sum: { amount: true },
         _count: true,
       }),
@@ -164,14 +101,14 @@ export async function getAnalytics(
     };
   });
 
-  // Fill gaps
+  // Fill gaps. The SQL buckets rows by UTC calendar day, so the walk must step
+  // through UTC days too (#1496).
   const filledData: DailyContribution[] = [];
-  let currentDate = new Date(start);
 
   const dataMap = new Map(dailyData.map((d) => [d.date, d]));
 
-  while (currentDate <= end) {
-    const dateStr = currentDate.toISOString().split("T")[0];
+  for (const day of utcDaysInRange(start, end)) {
+    const dateStr = day.toISOString().split("T")[0];
     const existing = dataMap.get(dateStr);
 
     filledData.push(
@@ -183,8 +120,6 @@ export async function getAnalytics(
         avgContribution: "0",
       }
     );
-
-    currentDate.setDate(currentDate.getDate() + 1);
   }
 
   // Calculate summary using Decimal arithmetic to avoid precision loss.
@@ -216,10 +151,17 @@ export async function getAnalytics(
 
   analyticsCache.set(cacheKey, { data: result, timestamp: Date.now() });
 
-  // Evict oldest entries when the cache exceeds max size to prevent OOM
+  // Evict the oldest 20% of entries when the cache exceeds max size to
+  // prevent OOM. A single-entry eviction (the previous behavior, see #950)
+  // can't keep up when writes arrive faster than one-at-a-time removal, so
+  // this removes a whole batch in one pass. Map iteration order is
+  // insertion order, so the first N keys are the oldest.
   if (analyticsCache.size > CACHE_MAX_SIZE) {
-    const oldest = analyticsCache.keys().next().value;
-    if (oldest !== undefined) analyticsCache.delete(oldest);
+    const evictCount = Math.max(1, Math.floor(CACHE_MAX_SIZE * 0.2));
+    const keysToEvict = Array.from(analyticsCache.keys()).slice(0, evictCount);
+    for (const key of keysToEvict) {
+      analyticsCache.delete(key);
+    }
   }
 
   if (format === "csv") {
@@ -253,6 +195,125 @@ function convertToCSV(analytics: any): string {
       .join("\n") + "\n";
 
   return csv;
+}
+
+interface GapFillInput {
+  date: Date;
+  total: number | string | bigint;
+  txCount: number | string | bigint;
+  uniqueContributors?: number | string | bigint;
+  avgContribution?: number | string | bigint;
+}
+
+interface GapFillOutput {
+  date: Date;
+  amount: string;
+  count: number;
+  uniqueContributors: number;
+  avgContribution: string;
+}
+
+/**
+ * Midnight UTC of every calendar day from `start`'s UTC day through `end`.
+ *
+ * Daily buckets come from UTC date truncation in SQL, so the walk steps in UTC.
+ * Stepping with local-time `setDate` breaks when the server is not on UTC: a
+ * DST change makes a "day" 23 or 25 hours long, so the UTC label it lands on
+ * can repeat or skip a date (#1496).
+ */
+export function utcDaysInRange(start: Date, end: Date): Date[] {
+  const days: Date[] = [];
+  const cursor = new Date(
+    Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()),
+  );
+  while (cursor <= end) {
+    days.push(new Date(cursor));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return days;
+}
+
+export function fillGaps(
+  results: GapFillInput[],
+  period: string,
+  from: Date,
+  to: Date,
+): { data: GapFillOutput[]; period: string } {
+  const dataMap = new Map<string, GapFillInput>();
+  for (const row of results) {
+    const d = row.date instanceof Date ? row.date : new Date(row.date);
+    let key: string;
+    if (period === "monthly") {
+      key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    } else if (period === "weekly") {
+      const startOfWeek = new Date(d);
+      startOfWeek.setDate(d.getDate() - d.getDay());
+      key = startOfWeek.toISOString().split("T")[0];
+    } else {
+      key = d.toISOString().split("T")[0];
+    }
+    dataMap.set(key, row);
+  }
+
+  const filled: GapFillOutput[] = [];
+  // Daily buckets are UTC days (DATE_TRUNC('day')), so start on one (#1496).
+  const cursor =
+    period === "monthly" || period === "weekly"
+      ? new Date(from)
+      : new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate()));
+
+  while (cursor <= to) {
+    let key: string;
+    let nextCursor: Date;
+
+    if (period === "monthly") {
+      key = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`;
+      nextCursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+    } else if (period === "weekly") {
+      const startOfWeek = new Date(cursor);
+      startOfWeek.setDate(cursor.getDate() - cursor.getDay());
+      key = startOfWeek.toISOString().split("T")[0];
+      nextCursor = new Date(cursor);
+      nextCursor.setDate(cursor.getDate() + 7);
+    } else {
+      key = cursor.toISOString().split("T")[0];
+      nextCursor = new Date(cursor);
+      nextCursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+
+    const existing = dataMap.get(key);
+    if (existing) {
+      const total = new Prisma.Decimal(existing.total);
+      const count = Number(existing.txCount);
+      const uniqueContributors = existing.uniqueContributors != null
+        ? Number(existing.uniqueContributors)
+        : 0;
+      const avgContribution = existing.avgContribution != null
+        ? String(existing.avgContribution)
+        : count > 0
+          ? total.div(count).toString()
+          : "0";
+      filled.push({
+        date: new Date(cursor),
+        amount: total.toString(),
+        count,
+        uniqueContributors,
+        avgContribution,
+      });
+    } else {
+      filled.push({
+        date: new Date(cursor),
+        amount: "0",
+        count: 0,
+        uniqueContributors: 0,
+        avgContribution: "0",
+      });
+    }
+
+    cursor.setTime(nextCursor.getTime());
+  }
+
+  return { data: filled, period };
 }
 
 export function clearAnalyticsCache(profileId?: string): void {

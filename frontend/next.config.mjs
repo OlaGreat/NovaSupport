@@ -31,22 +31,16 @@ const nextConfig = {
   async headers() {
     return [
       {
-        // Deny framing on all non-embed routes to mitigate clickjacking
-        source: "/((?!embed).*)",
-        headers: [
-          { key: "X-Frame-Options", value: "DENY" },
-          {
-            key: "Content-Security-Policy",
-            value: [
-              "default-src 'self'",
-              "script-src 'self' 'unsafe-inline'", // 'unsafe-inline' needed for Next.js inline chunks
-              "style-src 'self' 'unsafe-inline'",
-              `connect-src 'self' ${process.env.NEXT_PUBLIC_API_BASE_URL ?? ""} ${process.env.NEXT_PUBLIC_HORIZON_URL ?? ""} ${process.env.NEXT_PUBLIC_SOROBAN_RPC_URL ?? ""}`,
-              "img-src 'self' data: blob: https:",
-              "frame-ancestors 'none'",
-            ].join("; "),
-          },
-        ],
+        // Deny framing on all non-embed routes to mitigate clickjacking.
+        // The pattern uses a path-segment boundary "embed(/|$)" so only
+        // /embed and its children are excluded — not any future route that
+        // merely starts with the same letters.
+        // Content-Security-Policy is set in middleware.ts instead of here:
+        // process.env is only resolved at build time in next.config.mjs,
+        // which bakes in an empty connect-src on hosts where these vars
+        // are injected at runtime rather than build time.
+        source: "/((?!embed(/|$)).*)",
+        headers: [{ key: "X-Frame-Options", value: "DENY" }],
       },
       {
         // Allow cross-origin embedding of the embed widget pages

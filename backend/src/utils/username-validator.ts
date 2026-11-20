@@ -66,14 +66,17 @@ const RESERVED_WORDS = new Set([
 ]);
 
 // Common profanity and inappropriate words (basic filter)
-const PROFANITY_FILTER = /\b(profanity|badword|offensive|inappropriate)\b/i;
+// This list includes common offensive words and their variations
+const PROFANITY_FILTER =
+  /\b(ass|asshole|bitch|bitches|crap|damn|dammit|dammits|damn|fart|farts|farted|farthed|farthing|farting|farts|fuck|fucks|fucked|fucker|fuckers|fuckin|fucking|fuckings|gag|gags|gagged|gagging|god|goddam|goddamn|goddamned|goddamner|goddamners|goddamning|goddamns|goddamner|goddamners|goddamning|goddamns|godsdamn|godsake|hell|hells|hitter|hitters|horseshit|horseshits|jackass|jackasses|jerk|jerks|jerked|jerking|jerkings|jerks|motherfucker|motherfuckers|motherfucking|motherfuckings|piss|pissed|pisser|pissers|pisses|pissing|pissy|shit|shits|shitted|shitter|shitters|shitting|shittings|shitty|whore|whores|whored|whoring|suck|sucks|sucked|sucker|suckers|sucking|suckings|tit|tits|titted|titting|tittings|tittish|titty)\b/i;
 
 /**
  * Patterns that look confusing:
  * l (lowercase L) vs 1 (number one)
- * O (uppercase O) vs 0 (zero)
+ * o (lowercase o) vs 0 (zero)
+ * Note: Uppercase O is not checked since the format check ensures lowercase-only
  */
-const CONFUSING_PATTERNS = /[l01O]{3,}/;
+const CONFUSING_PATTERNS = /[l01o]{3,}/;
 
 /**
  * Check if a username is valid
@@ -91,13 +94,13 @@ export function isValidUsername(username: string): {
     return { valid: false, error: "Username must be at most 32 characters" };
   }
 
-  // Check format (lowercase alphanumeric and hyphens, no leading/trailing hyphens)
-  const validFormat = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
+  // Check format (lowercase alphanumeric and hyphens, no leading/trailing hyphens, no consecutive hyphens)
+  const validFormat = /^[a-z0-9]([a-z0-9]|-(?!-))*[a-z0-9]$|^[a-z0-9]$/;
   if (!validFormat.test(username)) {
     return {
       valid: false,
       error:
-        "Username must contain only lowercase letters, numbers, and hyphens (no leading/trailing hyphens)",
+        "Username must contain only lowercase letters, numbers, and hyphens (no leading/trailing hyphens or consecutive hyphens)",
     };
   }
 
@@ -179,10 +182,13 @@ export function generateSuggestions(baseUsername: string): string[] {
   const base = baseUsername.toLowerCase().replace(/[^a-z0-9]/g, "");
 
   // Suggestion 1: Add random number suffix
-  suggestions.push(`${base}-${Math.floor(Math.random() * 10000)}`);
+  const numericSuffix = Math.floor(Math.random() * 10000).toString();
+  suggestions.push(
+    `${base.slice(0, 31 - numericSuffix.length)}-${numericSuffix}`,
+  );
 
-  // Suggestion 2: Add "creator" prefix
-  if (!base.includes("creator")) {
+  // Suggestion 2: Add "creator" prefix (if result stays within 32 char limit)
+  if (!base.includes("creator") && base.length < 25) {
     suggestions.push(`creator-${base}`);
   }
 

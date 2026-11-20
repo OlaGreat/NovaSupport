@@ -115,7 +115,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
 // Optionally attaches auth context; does NOT reject unauthenticated requests
 // Accepts token from Authorization: Bearer header OR httpOnly cookie (#759)
-export function optionalAuth(req: Request, res: Response, next: NextFunction): void {
+export async function optionalAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   let token: string | undefined;
 
   const authHeader = req.headers.authorization;
@@ -128,6 +128,21 @@ export function optionalAuth(req: Request, res: Response, next: NextFunction): v
   if (token) {
     const auth = verifyJWT(token);
     if (auth) {
+      if (auth.jti) {
+        try {
+          const revoked = await prisma.revokedToken.findUnique({
+            where: { jti: auth.jti },
+          });
+          if (revoked) {
+            next();
+            return;
+          }
+        } catch (error) {
+          logger.error({ error }, "Failed to check token revocation status");
+          next();
+          return;
+        }
+      }
       req.auth = auth;
     }
   }

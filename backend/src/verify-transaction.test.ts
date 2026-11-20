@@ -1,18 +1,10 @@
 import assert from "node:assert/strict";
-import { Horizon } from "@stellar/stellar-sdk";
 import {
   verifyTransaction,
   clearVerificationCache,
   type ExpectedTxDetails,
 } from "./services/verify-transaction.js";
 
-// ── Live testnet server (used only where network access is acceptable) ────────
-const horizonUrl = "https://horizon-testnet.stellar.org";
-const liveServer = new Horizon.Server(horizonUrl);
-
-// Known successful testnet transaction (hash stable on the ledger)
-const VALID_HASH = "687258079685320c270c5e933454378f8c6eb534e79ec3795c73c33324f9db21";
-const INVALID_HASH = "0000000000000000000000000000000000000000000000000000000000000000";
 const DUMMY_RECIPIENT = "GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGPCECWZLKOXUJEUKABC1";
 
 // ── Test infrastructure ───────────────────────────────────────────────────────
@@ -64,25 +56,21 @@ async function test(name: string, fn: () => Promise<void>) {
 async function suiteBasicVerification() {
   console.log("\n── Basic Verification ──────────────────────────────────────────\n");
 
-  await test("known valid transaction returns true (live testnet)", async () => {
-    const result = await verifyTransaction(liveServer, VALID_HASH);
-    assert.strictEqual(result, true);
-  });
-
-  await test("unknown hash (404) returns false (live testnet)", async () => {
-    const result = await verifyTransaction(liveServer, INVALID_HASH);
-    assert.strictEqual(result, false);
-  });
-
   await test("unsuccessful transaction returns false", async () => {
     const server = makeMockServer({ txResult: { successful: false } });
     assert.strictEqual(await verifyTransaction(server, "hash1"), false);
   });
 
-  await test("unreachable Horizon (non-404 error) returns 'error'", async () => {
+  await test("unreachable Horizon (non-404 error) throws", async () => {
     const err = Object.assign(new Error("ECONNREFUSED"), { code: "ECONNREFUSED" });
     const server = makeMockServer({ txResult: err });
-    assert.strictEqual(await verifyTransaction(server, "hash2", 1, 10), "error");
+    await assert.rejects(
+      async () => verifyTransaction(server, "hash2", 1, 10),
+      (caught: any) => {
+        assert.ok(caught instanceof Error, "Should throw an Error");
+        return true;
+      }
+    );
   });
 
   await test("transaction exists and is successful returns true", async () => {
@@ -123,6 +111,19 @@ async function suiteDetailValidation() {
     });
     const expected: ExpectedTxDetails = {
       amount: "999",
+      recipientAddress: DUMMY_RECIPIENT,
+      assetCode: "XLM",
+    };
+    assert.strictEqual(await verifyTransaction(server, "abc", 3, 10, expected), false);
+  });
+
+  await test("two malformed amounts do not match", async () => {
+    const server = makeMockServer({
+      txResult: successTx,
+      opsResult: { records: [{ ...xlmPaymentOp, amount: "garbage" }] },
+    });
+    const expected: ExpectedTxDetails = {
+      amount: "not-a-number",
       recipientAddress: DUMMY_RECIPIENT,
       assetCode: "XLM",
     };
@@ -281,6 +282,44 @@ async function suiteDetailValidation() {
     };
     assert.strictEqual(await verifyTransaction(server, "abc", 3, 10, expected), true);
   });
+
+  await test("paginates operations beyond the first page", async () => {
+    let requestedLimit = 0;
+    const payment = {
+      type: "payment",
+      to: DUMMY_RECIPIENT,
+      amount: "10.0000000",
+      asset_type: "native",
+    };
+    const secondPage = { records: [payment] };
+    const firstPage = {
+      records: [],
+      next: async () => secondPage,
+    };
+    const server = {
+      transactions: () => ({
+        transaction: () => ({
+          call: async () => successTx,
+        }),
+      }),
+      operations: () => ({
+        forTransaction: () => ({
+          limit: (value: number) => {
+            requestedLimit = value;
+            return { call: async () => firstPage };
+          },
+        }),
+      }),
+    } as unknown as Horizon.Server;
+    const expected: ExpectedTxDetails = {
+      amount: "10",
+      recipientAddress: DUMMY_RECIPIENT,
+      assetCode: "XLM",
+    };
+
+    assert.strictEqual(await verifyTransaction(server, "paged-hash", 3, 10, expected), true);
+    assert.equal(requestedLimit, 100);
+  });
 }
 
 async function suiteCaching() {
@@ -372,8 +411,9 @@ async function suiteExponentialBackoff() {
   console.log("\n── Exponential Backoff ─────────────────────────────────────────\n");
 
   await test("succeeds immediately without retrying (fast path)", async () => {
+    const server = makeMockServer({ txResult: { successful: true } });
     const startTime = Date.now();
-    const result = await verifyTransaction(liveServer, VALID_HASH, 2, 500);
+    const result = await verifyTransaction(server, "fast-hash", 2, 500);
     const elapsed = Date.now() - startTime;
     assert.strictEqual(result, true);
     assert.ok(elapsed < 1000, `No retry expected on first-attempt success (elapsed: ${elapsed}ms)`);
@@ -403,7 +443,7 @@ async function suiteExponentialBackoff() {
     assert.strictEqual(attempt, 3, "Should retry twice before succeeding");
   });
 
-  await test("returns 'error' after exhausting all retries", async () => {
+  await test("throws after exhausting all retries", async () => {
     let attempt = 0;
     const server = {
       transactions: () => ({
@@ -419,8 +459,13 @@ async function suiteExponentialBackoff() {
       }),
     } as unknown as Horizon.Server;
 
-    const result = await verifyTransaction(server, "exhaust-hash", 3, 10);
-    assert.strictEqual(result, "error");
+    await assert.rejects(
+      async () => verifyTransaction(server, "exhaust-hash", 3, 10),
+      (err: any) => {
+        assert.ok(err instanceof Error, "Should throw an Error");
+        return true;
+      }
+    );
     assert.strictEqual(attempt, 3, "Should attempt exactly 3 times");
   });
 

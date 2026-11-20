@@ -1,6 +1,7 @@
 import { sendEmail } from "../mailer.js";
+import { escapeHtml } from "../services/email.js";
 
-const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
+const APP_URL = (process.env.APP_URL ?? "http://localhost:3000").replace(/\/+$/, "");
 
 export async function sendVerificationEmail(
   to: string,
@@ -12,7 +13,7 @@ export async function sendVerificationEmail(
   const html = `
     <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #1e293b;">
       <h2 style="color: #6366f1;">Verify your NovaSupport email address</h2>
-      <p>Hi ${username},</p>
+      <p>Hi ${escapeHtml(username)},</p>
       <p>Thank you for joining NovaSupport! Please verify your email address by clicking the button below. This helps ensure your account is secure and you receive important notifications about your support transactions.</p>
       <div style="margin: 32px 0;">
         <a href="${verifyUrl}" style="display:inline-block;padding:14px 28px;background:#6366f1;color:#fff;text-decoration:none;border-radius:12px;font-weight: 600;">Verify email address</a>

@@ -11,7 +11,7 @@ type Asset = {
 type ProfileStats = {
   totalTransactions: number;
   uniqueSupporters: number;
-  assetTotals: Array<{ assetCode: string; total: string }>;
+  assetTotals?: Array<{ assetCode: string; total: string }>;
 };
 
 type Supporter = {
@@ -75,6 +75,7 @@ export function EmbedWidget({
 }: EmbedWidgetProps) {
   const t = themeClasses[theme];
   const s = sizeClasses[size];
+  const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
 
   const truncate = (addr: string) =>
     addr.length > 10 ? `${addr.slice(0, 4)}…${addr.slice(-4)}` : addr;
@@ -87,15 +88,16 @@ export function EmbedWidget({
     >
       {/* Header */}
       <div className="flex items-center gap-3 mb-3">
-        {avatarUrl ? (
+        {avatarUrl && failedAvatarUrl !== avatarUrl ? (
           <img
             src={avatarUrl}
             alt={displayName}
             className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+            onError={() => setFailedAvatarUrl(avatarUrl)}
           />
         ) : (
           <div className="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold flex-shrink-0">
-            {displayName.slice(0, 2).toUpperCase()}
+            {(displayName ? displayName.slice(0, 2) : "?").toUpperCase()}
           </div>
         )}
         <div className="min-w-0">
@@ -124,7 +126,7 @@ export function EmbedWidget({
             </p>
             <p className={`font-bold ${t.text}`}>{stats.totalTransactions}</p>
           </div>
-          {stats.assetTotals.slice(0, 1).map((a) => (
+          {stats.assetTotals?.slice(0, 1).map((a) => (
             <div key={a.assetCode}>
               <p className={`${t.muted} uppercase tracking-wider`} style={{ fontSize: "0.6rem" }}>
                 Total ({a.assetCode})
@@ -215,10 +217,9 @@ export function EmbedCodeGenerator({ username }: EmbedCodeGeneratorProps) {
   const embedCode = `<iframe
   src="${iframeUrl}"
   width="${size === "small" ? 320 : size === "medium" ? 380 : 448}"
-  height="320"
+  height="600"
   frameborder="0"
-  scrolling="no"
-  style="border:none;border-radius:1rem;overflow:hidden;"
+  style="border:none;border-radius:1rem;"
   title="Support ${username} on NovaSupport"
 ></iframe>`;
 
@@ -296,10 +297,14 @@ export function EmbedCodeGenerator({ username }: EmbedCodeGeneratorProps) {
         </pre>
         <button
           onClick={handleCopy}
+          aria-label={copied ? "Embed code copied" : "Copy embed code"}
           className="absolute top-2 right-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-white hover:bg-white/10 transition-colors"
         >
           {copied ? "Copied!" : "Copy"}
         </button>
+        <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+          {copied ? "Embed code copied to clipboard" : ""}
+        </div>
       </div>
     </div>
   );

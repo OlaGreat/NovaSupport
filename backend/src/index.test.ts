@@ -250,7 +250,7 @@ async function main() {
       assert.ok(body.lastSupportedAt);
 
       // Sort to ensure deterministic deepEqual
-      const sortedTotals = body.totalByAsset.sort((a: any, b: any) => a.assetCode.localeCompare(b.assetCode));
+      const sortedTotals = body.assetTotals.sort((a: any, b: any) => a.assetCode.localeCompare(b.assetCode));
       assert.deepEqual(sortedTotals, [
         { assetCode: "USDC", assetIssuer: null, total: "2.2500000" },
         { assetCode: "XLM", assetIssuer: null, total: "114.5000000" },

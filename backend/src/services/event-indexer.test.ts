@@ -1,9 +1,7 @@
 // Lightweight unit tests for the EventIndexer (#281 / #423).
 //
-// We don't have a Prisma test instance available in this PR, so the tests
-// drive the indexer with a hand-rolled mock that satisfies just the prisma
-// surface area the indexer touches. A future PR will add Postgres-backed
-// integration tests when the migration lands in CI.
+// Mocked unit tests validate the indexer logic against Prisma surface area.
+// Integration tests (below) hit a real Postgres database to catch schema drift.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -12,6 +10,8 @@ import {
   type EventIndexerRpcClient,
   type SupportEventRecord,
 } from "./event-indexer.js";
+import { prisma } from "../db.js";
+import { seedUser, seedProfile, cleanupTestData } from "../test-harness.js";
 
 interface CursorRow {
   network: string;
@@ -99,6 +99,11 @@ function buildPrismaMock(): {
   };
 
   const supportTxClient = {
+    findMany: async () => [],
+    count: async () => 0,
+    updateMany: async () => ({ count: 0 }),
+    findUnique: async (args: { where: { txHash: string } }) =>
+      insertedHashes.includes(args.where.txHash) ? { id: args.where.txHash } : null,
     upsert: async (args: { where: { txHash: string }; create: any; update: any }) => {
       upsertCalls.push({
         txHash: args.where.txHash,
@@ -426,7 +431,7 @@ await test("EventIndexer.pollOnce advances cursor across sequential pages", asyn
   // Second page — reads cursor from DB which was updated by page 1
   const page2 = await indexer.pollOnce();
   assert.equal(page2.ingested, 1);
-  assert.equal(page2.nextCursor, null);
+  assert.equal(page2.nextCursor, "500-2");
 
   assert.equal(mock.upsertCalls.length, 2);
   assert.deepEqual(mock.insertedHashes, ["tx-p1", "tx-p2"]);
@@ -449,9 +454,9 @@ await test("EventIndexer.resolveOrphans links orphaned transactions to matching 
   mock.prisma.profile = {
     findMany: async () => profiles,
   };
-  mock.prisma.supportTransaction.update = async (args: { where: { id: string }; data: { profileId: string } }) => {
-    updatedIds.push(args.where.id);
-    return {};
+  mock.prisma.supportTransaction.updateMany = async (args: { where: { recipientAddress: string }; data: { profileId: string } }) => {
+    updatedIds.push(orphanId);
+    return { count: 1 };
   };
 
   const indexer = new EventIndexer({
@@ -464,6 +469,32 @@ await test("EventIndexer.resolveOrphans links orphaned transactions to matching 
   const resolved = await indexer.resolveOrphans();
   assert.equal(resolved, 1);
   assert.deepEqual(updatedIds, [orphanId]);
+});
+
+await test("EventIndexer.resolveOrphans rotates past a full page of unresolvable orphans (#1503)", async () => {
+  const mock = buildPrismaMock();
+  const page = Array.from({ length: 100 }, (_, i) => ({
+    id: `id-${String(i).padStart(3, "0")}`,
+    recipientAddress: "GNOBODY",
+  }));
+  const queries: any[] = [];
+  mock.prisma.supportTransaction.findMany = async (args: any) => {
+    queries.push(args);
+    return queries.length === 1 ? page : [];
+  };
+  mock.prisma.profile = { findMany: async () => [] };
+
+  const indexer = new EventIndexer({
+    prisma: mock.prisma,
+    rpcClient: rpc([]),
+    network: "TESTNET",
+    contractId: "C123",
+  });
+
+  await indexer.resolveOrphans();
+  await indexer.resolveOrphans();
+  assert.deepEqual(queries[0].orderBy, { id: "asc" });
+  assert.deepEqual(queries[1].where.id, { gt: "id-099" });
 });
 
 await test("EventIndexer.resolveOrphans returns 0 when no orphans exist", async () => {
@@ -479,6 +510,32 @@ await test("EventIndexer.resolveOrphans returns 0 when no orphans exist", async 
 
   const resolved = await indexer.resolveOrphans();
   assert.equal(resolved, 0);
+});
+
+await test("EventIndexer.resolveOrphans sets the metric to zero when backlog drains", async () => {
+  const mock = buildPrismaMock();
+  mock.prisma.supportTransaction.findMany = async () => [];
+  mock.prisma.supportTransaction.count = async () => 0;
+
+  const calls: number[] = [];
+  const { Metrics } = await import("../metrics.js");
+  const original = Metrics.orphanCount;
+  Metrics.orphanCount = (count: number) => calls.push(count);
+
+  try {
+    const indexer = new EventIndexer({
+      prisma: mock.prisma,
+      rpcClient: rpc([]),
+      network: "TESTNET",
+      contractId: "C123",
+    });
+
+    const resolved = await indexer.resolveOrphans();
+    assert.equal(resolved, 0);
+    assert.deepEqual(calls, [0]);
+  } finally {
+    Metrics.orphanCount = original;
+  }
 });
 
 await test("EventIndexer passes startLedger to RPC client when cursor is empty", async () => {
@@ -560,4 +617,125 @@ await test("EventIndexer.stop prevents further ticks from being scheduled", asyn
   // Wait to confirm no more ticks fire after stop
   await new Promise((resolve) => setTimeout(resolve, 50));
   assert.equal(pollCount, countAfterStop, "No more polls should fire after stop()");
+});
+
+// ── Integration tests (real Postgres database) ──────────────────────────────
+
+await test("EventIndexer integration: ingests support transactions into real Postgres", async () => {
+  const userId = await seedUser();
+  const profileId = await seedProfile(userId);
+
+  const mockRpc: EventIndexerRpcClient = {
+    async fetchEvents() {
+      return {
+        events: [
+          {
+            txHash: "tx-integration-1",
+            ledger: 100,
+            pagingToken: "100-1",
+            amount: "50.0000000",
+            assetCode: "XLM",
+            assetIssuer: null,
+            recipientAddress: "G" + "A".repeat(55),
+            supporterAddress: "G" + "B".repeat(55),
+            message: "test",
+            emittedAt: new Date(),
+          },
+        ],
+        nextPagingToken: null,
+      };
+    },
+  };
+
+  const indexer = new EventIndexer({
+    prisma,
+    rpcClient: mockRpc,
+    network: "TESTNET",
+    contractId: "CINTEGRATION1",
+  });
+
+  const result = await indexer.pollOnce();
+  assert.equal(result.ingested, 1, "Should ingest 1 transaction");
+
+  const tx = await prisma.supportTransaction.findFirst({
+    where: { txHash: "tx-integration-1" },
+  });
+  assert.ok(tx, "Transaction should be stored in real database");
+  assert.equal(tx.amount, "50.0000000");
+
+  const cursor = await prisma.indexerCursor.findUnique({
+    where: { network_contractId: { network: "TESTNET", contractId: "CINTEGRATION1" } },
+  });
+  assert.ok(cursor, "Cursor should be saved in real database");
+  assert.equal(cursor.lastPagingToken, "100-1");
+
+  await cleanupTestData([profileId], [userId]);
+});
+
+await test("EventIndexer integration: handles duplicate txHash idempotently", async () => {
+  const userId = await seedUser();
+  const profileId = await seedProfile(userId);
+
+  let callCount = 0;
+  const mockRpc: EventIndexerRpcClient = {
+    async fetchEvents() {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          events: [
+            {
+              txHash: "tx-duplicate-test",
+              ledger: 200,
+              pagingToken: "200-1",
+              amount: "100.0000000",
+              assetCode: "XLM",
+              assetIssuer: null,
+              recipientAddress: "G" + "A".repeat(55),
+              supporterAddress: "G" + "C".repeat(55),
+              message: "first",
+              emittedAt: new Date(),
+            },
+          ],
+          nextPagingToken: "200-1",
+        };
+      }
+      return {
+        events: [
+          {
+            txHash: "tx-duplicate-test",
+            ledger: 200,
+            pagingToken: "200-1",
+            amount: "100.0000000",
+            assetCode: "XLM",
+            assetIssuer: null,
+            recipientAddress: "G" + "A".repeat(55),
+            supporterAddress: "G" + "C".repeat(55),
+            message: "first",
+            emittedAt: new Date(),
+          },
+        ],
+        nextPagingToken: null,
+      };
+    },
+  };
+
+  const indexer = new EventIndexer({
+    prisma,
+    rpcClient: mockRpc,
+    network: "TESTNET",
+    contractId: "CINTEGRATION2",
+  });
+
+  const result1 = await indexer.pollOnce();
+  assert.equal(result1.ingested, 1, "First poll should ingest 1 transaction");
+
+  const result2 = await indexer.pollOnce();
+  assert.equal(result2.ingested, 0, "Second poll should not re-ingest duplicate");
+
+  const txs = await prisma.supportTransaction.findMany({
+    where: { txHash: "tx-duplicate-test" },
+  });
+  assert.equal(txs.length, 1, "Should have exactly 1 transaction (no duplicates)");
+
+  await cleanupTestData([profileId], [userId]);
 });

@@ -1,7 +1,9 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { logger } from "../logger.js";
 
-const BACKOFF_SCHEDULE_SECONDS = [1, 10, 100];
+// One delay per retry: 3 attempts total means 2 retries, so 2 tiers (#1502).
+const BACKOFF_SCHEDULE_SECONDS = [1, 10];
+const MAX_DELIVERY_ATTEMPTS = BACKOFF_SCHEDULE_SECONDS.length + 1;
 const DELIVERY_TIMEOUT_MS = 10_000;
 
 export type WebhookPayload = Record<string, unknown>;
@@ -67,8 +69,20 @@ export async function deliverWebhook(
         "X-NovaSupport-Event": (payload.event as string) ?? "unknown",
       },
       body: payloadString,
+      redirect: "manual",
       signal: mergedSignal,
     });
+
+    if (
+      response.type === "opaqueredirect" ||
+      (response.status >= 300 && response.status < 400)
+    ) {
+      return {
+        status: "failed",
+        error: "HTTP 3xx redirects are not allowed",
+        willRetry: false,
+      };
+    }
 
     if (response.ok) {
       return { status: "success", statusCode: response.status };
@@ -107,7 +121,7 @@ export function getNextRetryDelay(attemptCount: number): number | null {
 }
 
 export function shouldRetry(attemptCount: number): boolean {
-  return attemptCount < BACKOFF_SCHEDULE_SECONDS.length;
+  return attemptCount < MAX_DELIVERY_ATTEMPTS;
 }
 
 function combineSignals(

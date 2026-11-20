@@ -36,15 +36,6 @@ type Profile = {
   emailVerified?: boolean;
 };
 
-type SupportTx = {
-  txHash: string;
-  amount: string;
-  assetCode: string;
-  message?: string | null;
-  createdAt: string;
-  supporterAddress: string | null;
-};
-
 type Milestone = {
   id: string;
   title: string;
@@ -125,16 +116,6 @@ export async function generateMetadata({
   };
 }
 
-async function getTransactions(username: string, limit = 10): Promise<SupportTx[]> {
-  const res = await fetch(
-    `${API_BASE_URL}/profiles/${username}/transactions?limit=${limit}`,
-    { next: { revalidate: 60 } },
-  );
-  if (!res.ok) return [];
-  const body = await res.json();
-  return body.transactions ?? [];
-}
-
 function truncateAddress(address: string): string {
   if (address.length <= 10) return address;
   return `${address.slice(0, 4)}...${address.slice(-4)}`;
@@ -182,12 +163,13 @@ async function getStats(username: string): Promise<ProfileStats | null> {
 }
 
 async function getMilestones(username: string): Promise<Milestone[]> {
-  const res = await fetch(`${API_BASE_URL}/profiles/${username}/milestones`, {
+  const res = await fetch(`${API_BASE_URL}/profiles/${username}/milestones?limit=100`, {
     next: { revalidate: 60 },
   });
   if (!res.ok) return [];
   const body = await res.json();
-  return body.milestones ?? body ?? [];
+  const milestones = body.milestones ?? body;
+  return Array.isArray(milestones) ? milestones : [];
 }
 
 async function getBadges(username: string): Promise<Badge[]> {
@@ -200,10 +182,9 @@ async function getBadges(username: string): Promise<Badge[]> {
 }
 
 export default async function ProfilePage({ params }: PageProps) {
-  const [profile, transactions, leaderboard, stats, milestones, badges] =
+  const [profile, leaderboard, stats, milestones, badges] =
     await Promise.all([
       getProfile(params.username),
-      getTransactions(params.username, 10),
       getLeaderboard(params.username),
       getStats(params.username),
       getMilestones(params.username),
@@ -224,6 +205,14 @@ export default async function ProfilePage({ params }: PageProps) {
           : null;
       })()
     : null;
+
+  const dominantAssetTotal = stats?.assetTotals?.length
+    ? stats.assetTotals.reduce(
+        (dominant, current) =>
+          Number(current.total) > Number(dominant.total) ? current : dominant,
+        stats.assetTotals[0],
+      )
+    : undefined;
 
   const sameAs = [
     profile.websiteUrl,
@@ -254,7 +243,9 @@ export default async function ProfilePage({ params }: PageProps) {
     <AppShell>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c"),
+        }}
       />
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-8 items-start animate-fade-in">
         <div className="space-y-12">
@@ -333,12 +324,14 @@ export default async function ProfilePage({ params }: PageProps) {
         </div>
 
         <aside className="sticky top-24">
-          <SupportPanel
-            walletAddress={profile.walletAddress}
-            acceptedAssets={profile.acceptedAssets}
-            profileId={profile.id}
-            recipientDisplayName={profile.displayName}
-          />
+          <div id="support" className="scroll-mt-28">
+            <SupportPanel
+              walletAddress={profile.walletAddress}
+              acceptedAssets={profile.acceptedAssets}
+              profileId={profile.id}
+              recipientDisplayName={profile.displayName}
+            />
+          </div>
 
           {leaderboard.length > 0 ? (
             <div className="mt-6 rounded-3xl border border-white/5 bg-white/[0.02] p-6">
@@ -374,7 +367,7 @@ export default async function ProfilePage({ params }: PageProps) {
                 title="Be the first to support this creator."
                 description="This profile hasn't received support yet."
                 ctaLabel="Support Creator"
-                ctaHref={`/profile/${profile.username}`}
+                ctaHref="#support"
               />
             </div>
           )}
@@ -387,8 +380,8 @@ export default async function ProfilePage({ params }: PageProps) {
               <div className="flex items-center justify-between">
                 <span className="text-sm text-sky/60">Total Raised</span>
                 <span className="text-sm font-bold text-white">
-                  {stats?.assetTotals?.[0]?.total || "0"}{" "}
-                  {stats?.assetTotals?.[0]?.assetCode || "XLM"}
+                  {dominantAssetTotal?.total || "0"}{" "}
+                  {dominantAssetTotal?.assetCode || "XLM"}
                 </span>
               </div>
               <div className="flex items-center justify-between">

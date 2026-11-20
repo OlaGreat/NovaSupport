@@ -17,15 +17,17 @@ type Profile = {
 };
 
 type SortOption = "newest" | "most_supported" | "most_transactions";
-type AssetFilter = "all" | "XLM" | "USDC";
+type AssetFilter = string;
 
 export default function ExplorePage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [filterProfiles, setFilterProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sort, setSort] = useState<SortOption>("newest");
   const [asset, setAsset] = useState<AssetFilter>("all");
   const [assetIssuer, setAssetIssuer] = useState<string>("");
+  const [availableAssets, setAvailableAssets] = useState<string[]>([]);
   const [availableIssuers, setAvailableIssuers] = useState<
     Array<{ code: string; issuer: string }>
   >([]);
@@ -49,14 +51,30 @@ export default function ExplorePage() {
   }, [sort, asset, assetIssuer]);
 
   useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE_URL}/profiles?limit=100&offset=0&sort=newest`)
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error("Failed to fetch filter options")))
+      .then((data) => {
+        if (!cancelled) setFilterProfiles(Array.isArray(data.profiles) ? data.profiles : []);
+      })
+      .catch(() => {
+        if (!cancelled) setFilterProfiles([]);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    const assetCodes = new Set<string>();
     const issuers = new Set<string>();
-    profiles.forEach((p) => {
+    filterProfiles.forEach((p) => {
       p.acceptedAssets.forEach((a) => {
+        assetCodes.add(a.code);
         if (a.issuer) {
           issuers.add(`${a.code}:${a.issuer}`);
         }
       });
     });
+    setAvailableAssets(Array.from(assetCodes).sort());
     const unique = Array.from(issuers)
       .map((str) => {
         const [code, issuer] = str.split(":");
@@ -64,7 +82,7 @@ export default function ExplorePage() {
       })
       .sort((a, b) => a.code.localeCompare(b.code) || a.issuer.localeCompare(b.issuer));
     setAvailableIssuers(unique);
-  }, [profiles]);
+  }, [filterProfiles]);
 
   async function fetchProfiles(currentOffset: number, reset = false) {
     abortControllerRef.current?.abort();
@@ -98,14 +116,15 @@ export default function ExplorePage() {
       }
 
       const data = await response.json();
+      const fetchedProfiles = Array.isArray(data.profiles) ? data.profiles : [];
 
       if (reset) {
-        setProfiles(data.profiles);
+        setProfiles(fetchedProfiles);
       } else {
-        setProfiles((prev) => [...prev, ...data.profiles]);
+        setProfiles((prev) => [...prev, ...fetchedProfiles]);
       }
 
-      setHasMore(data.profiles.length === limit);
+      setHasMore(fetchedProfiles.length === limit);
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
       setError(err instanceof Error ? err.message : "Failed to load profiles");
@@ -137,10 +156,11 @@ export default function ExplorePage() {
         {/* Filters */}
         <div className="mb-8 flex flex-wrap gap-4">
           <div>
-            <label className="text-xs uppercase tracking-[0.2em] text-sky/70 block mb-2">
+            <label htmlFor="explore-sort" className="text-xs uppercase tracking-[0.2em] text-sky/70 block mb-2">
               Sort by
             </label>
             <select
+              id="explore-sort"
               value={sort}
               onChange={(e) => setSort(e.target.value as SortOption)}
               className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white focus:border-mint/50 focus:outline-none"
@@ -152,36 +172,41 @@ export default function ExplorePage() {
           </div>
 
           <div>
-            <label className="text-xs uppercase tracking-[0.2em] text-sky/70 block mb-2">
+            <label htmlFor="explore-asset" className="text-xs uppercase tracking-[0.2em] text-sky/70 block mb-2">
               Asset
             </label>
             <select
+              id="explore-asset"
               value={asset}
               onChange={(e) => {
-                setAsset(e.target.value as AssetFilter);
+                setAsset(e.target.value);
                 setAssetIssuer("");
               }}
               className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white focus:border-mint/50 focus:outline-none"
             >
               <option value="all">All</option>
-              <option value="XLM">XLM</option>
-              <option value="USDC">USDC</option>
+              {availableAssets.map((code) => (
+                <option key={code} value={code}>
+                  {code}
+                </option>
+              ))}
             </select>
           </div>
 
           {filteredIssuers.length > 0 && (
             <div>
-              <label className="text-xs uppercase tracking-[0.2em] text-sky/70 block mb-2">
+              <label htmlFor="explore-issuer" className="text-xs uppercase tracking-[0.2em] text-sky/70 block mb-2">
                 Issuer
               </label>
               <select
+                id="explore-issuer"
                 value={assetIssuer}
                 onChange={(e) => setAssetIssuer(e.target.value)}
                 className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white focus:border-mint/50 focus:outline-none"
               >
                 <option value="">All Issuers</option>
                 {filteredIssuers.map((issuer) => (
-                  <option key={issuer.issuer} value={issuer.issuer}>
+                  <option key={`${issuer.code}:${issuer.issuer}`} value={issuer.issuer}>
                     {issuer.code} — {issuer.issuer.slice(0, 4)}…{issuer.issuer.slice(-4)}
                   </option>
                 ))}
@@ -208,7 +233,7 @@ export default function ExplorePage() {
 
         {/* Error state */}
         {error && (
-          <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-6 py-4 text-red-200">
+          <div role="alert" aria-live="assertive" className="rounded-2xl border border-red-500/30 bg-red-500/10 px-6 py-4 text-red-200">
             {error}
           </div>
         )}
@@ -233,7 +258,7 @@ export default function ExplorePage() {
                     />
                   ) : (
                     <div className="h-20 w-20 rounded-full bg-gradient-to-br from-mint to-gold mb-4 flex items-center justify-center text-2xl font-bold text-ink">
-                      {profile.displayName[0].toUpperCase()}
+                      {(profile.displayName?.[0] || '?').toUpperCase()}
                     </div>
                   )}
                   <h3 className="text-xl font-semibold text-white mb-1">
@@ -272,7 +297,7 @@ export default function ExplorePage() {
 
             {/* Infinite scroll sentinel */}
             {hasMore && profiles.length > 0 && (
-              <div ref={sentinelRef} className="mt-8 text-center py-4">
+              <div ref={sentinelRef} role="status" aria-live="polite" aria-busy={loading} className="mt-8 text-center py-4">
                 {loading && (
                   <div className="flex items-center justify-center gap-2">
                     <div className="h-2 w-2 rounded-full bg-mint animate-pulse" />

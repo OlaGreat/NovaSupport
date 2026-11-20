@@ -105,7 +105,7 @@ test("CircuitBreaker throws when OPEN and timeout not expired", async () => {
 });
 
 test("CircuitBreaker transitions to HALF_OPEN after resetTimeout expires", async () => {
-  const cb = new CircuitBreaker(1, 10);
+  const cb = new CircuitBreaker(1, 99999);
 
   // Open the breaker
   try {
@@ -117,8 +117,9 @@ test("CircuitBreaker transitions to HALF_OPEN after resetTimeout expires", async
   }
   assert.equal(cb.getState(), "OPEN");
 
-  // Wait for timeout
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  // Deterministically expire the reset timeout by backdating nextAttempt
+  // instead of relying on a real wall-clock wait that can flake under CI load.
+  (cb as unknown as { nextAttempt: number }).nextAttempt = Date.now() - 1;
 
   // Should transition to HALF_OPEN and attempt execution
   const result = await cb.execute(async () => "recovered");
@@ -127,7 +128,7 @@ test("CircuitBreaker transitions to HALF_OPEN after resetTimeout expires", async
 });
 
 test("CircuitBreaker HALF_OPEN success transitions to CLOSED", async () => {
-  const cb = new CircuitBreaker(1, 10);
+  const cb = new CircuitBreaker(1, 99999);
 
   // Open the breaker
   try {
@@ -139,8 +140,9 @@ test("CircuitBreaker HALF_OPEN success transitions to CLOSED", async () => {
   }
   assert.equal(cb.getState(), "OPEN");
 
-  // Wait for timeout
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  // Deterministically expire the reset timeout by backdating nextAttempt
+  // instead of relying on a real wall-clock wait that can flake under CI load.
+  (cb as unknown as { nextAttempt: number }).nextAttempt = Date.now() - 1;
 
   // Success in HALF_OPEN should go to CLOSED
   await cb.execute(async () => "ok");

@@ -12,6 +12,10 @@ on:
       - "backend/**"
       - ".github/workflows/backend.yml"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   backend:
     name: Backend checks
@@ -41,6 +45,7 @@ jobs:
       DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/novasupport_test
       NODE_ENV: test
       SKIP_HORIZON_VALIDATION: "true"
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
 
     steps:
       - name: Check out repository
@@ -54,7 +59,7 @@ jobs:
           cache-dependency-path: backend/package-lock.json
 
       - name: Install backend dependencies
-        run: npm ci
+        run: npm ci --legacy-peer-deps
 
       - name: Generate Prisma client
         run: npm run db:generate
@@ -99,11 +104,14 @@ jobs:
       - name: Run backend tests
         run: npm run test
 
+      - name: Lint backend
+        run: npm run lint
+
       - name: Build backend
         run: npm run build
 
       - name: Upload source maps to Sentry
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && env.SENTRY_AUTH_TOKEN != ''
         run: npx @sentry/cli releases files "$SENTRY_RELEASE" upload-sourcemaps ./dist
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}

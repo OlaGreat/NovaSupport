@@ -31,7 +31,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install stable Rust with WASM target
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.88.0
         with:
           targets: wasm32-unknown-unknown
 
@@ -54,17 +54,21 @@ jobs:
           retention-days: 1
 
   deploy:
-    name: Deploy to testnet
+    name: Deploy to ${{ github.event.inputs.network || 'testnet' }}
     needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    environment: testnet
+    environment: ${{ github.event.inputs.network || 'testnet' }}
+
+    outputs:
+      network: ${{ env.NETWORK }}
+      contract_id: ${{ steps.deploy.outputs.contract_id }}
 
     env:
       NETWORK: ${{ github.event.inputs.network || 'testnet' }}
-      STELLAR_NETWORK_PASSPHRASE: "Test SDF Network ; September 2015"
-      SOROBAN_RPC_URL: "https://soroban-testnet.stellar.org"
-      HORIZON_URL: "https://horizon-testnet.stellar.org"
+      STELLAR_NETWORK_PASSPHRASE: ${{ github.event.inputs.network == 'mainnet' && 'Public Global Stellar Network ; September 2015' || 'Test SDF Network ; September 2015' }}
+      SOROBAN_RPC_URL: ${{ github.event.inputs.network == 'mainnet' && 'https://soroban-mainnet.stellar.org' || 'https://soroban-testnet.stellar.org' }}
+      HORIZON_URL: ${{ github.event.inputs.network == 'mainnet' && 'https://horizon.stellar.org' || 'https://horizon-testnet.stellar.org' }}
 
     steps:
       - name: Check out repository
@@ -87,7 +91,7 @@ jobs:
           stellar network add \
             --rpc-url "$SOROBAN_RPC_URL" \
             --network-passphrase "$STELLAR_NETWORK_PASSPHRASE" \
-            testnet || true
+            "$NETWORK" || true
 
       - name: Import deployer identity
         run: |
@@ -105,7 +109,7 @@ jobs:
           CONTRACT_ID=$(stellar contract deploy \
             --wasm wasm/support_page.wasm \
             --source deployer \
-            --network testnet \
+            --network "$NETWORK" \
             --ignore-checks 2>&1 | tail -1)
 
           echo "contract_id=$CONTRACT_ID" >> "$GITHUB_OUTPUT"
@@ -116,7 +120,7 @@ jobs:
           stellar contract invoke \
             --id "${{ steps.deploy.outputs.contract_id }}" \
             --source deployer \
-            --network testnet \
+            --network "$NETWORK" \
             -- initialize \
             --admin "${{ secrets.STELLAR_ADMIN_ADDRESS }}"
 
@@ -126,7 +130,7 @@ jobs:
           COUNT=$(stellar contract invoke \
             --id "${{ steps.deploy.outputs.contract_id }}" \
             --source deployer \
-            --network testnet \
+            --network "$NETWORK" \
             -- support_count 2>&1 | tail -1)
 
           echo "support_count=$COUNT" >> "$GITHUB_OUTPUT"
@@ -143,12 +147,17 @@ jobs:
           echo "| Support Count | ${{ steps.verify.outputs.support_count }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Commit | \`${{ github.sha }}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Deployed by | ${{ github.actor }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Explorer | [View on Stellar Expert](https://stellar.expert/explorer/testnet/contract/${{ steps.deploy.outputs.contract_id }}) |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Explorer | [View on Stellar Expert](https://stellar.expert/explorer/${{ env.NETWORK }}/contract/${{ steps.deploy.outputs.contract_id }}) |" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Update CONTRACT_ID secret via GitHub API
+      - name: Update network-scoped CONTRACT_ID secret via GitHub API
         env:
           GH_TOKEN: ${{ secrets.GH_PAT_UPDATE_SECRETS }}
+          CONTRACT_ID: ${{ steps.deploy.outputs.contract_id }}
+          NETWORK: ${{ env.NETWORK }}
         run: |
+          NETWORK_UPPER=$(echo "$NETWORK" | tr '[:lower:]' '[:upper:]')
+          SECRET_NAME="NEXT_PUBLIC_CONTRACT_ID_${NETWORK_UPPER}"
+
           # Fetch the repo public key for secret encryption
           PUB_KEY_RESP=$(curl -sS \
             -H "Authorization: Bearer $GH_TOKEN" \
@@ -158,33 +167,62 @@ jobs:
           KEY_ID=$(echo "$PUB_KEY_RESP" | grep '"key_id"' | sed 's/.*: "\(.*\)".*/\1/')
           PUB_KEY=$(echo "$PUB_KEY_RESP" | grep '"key"' | sed 's/.*: "\(.*\)".*/\1/')
 
-          # Use Python (available on ubuntu-latest) to encrypt with libsodium
-          ENCRYPTED=$(python3 - <<EOF
-          import base64, sys
-          from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PublicKey
-          from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+          # Use Python (available on ubuntu-latest) to encrypt with libsodium using pinned PyNaCl
+          ENCRYPTED=$(PUB_KEY="$PUB_KEY" CONTRACT_ID="$CONTRACT_ID" python3 - <<'EOF'
+          import base64, os, sys
 
-          # Use PyNaCl for sealed box encryption (matches GitHub's requirement)
-          import subprocess, json
-          subprocess.check_call(["pip", "install", "PyNaCl", "-q"])
+          # Use PyNaCl for sealed box encryption (matches GitHub's requirement, pinned version)
+          import subprocess
+          subprocess.check_call(["pip", "install", "PyNaCl==1.5.0", "-q"])
           import nacl.encoding, nacl.public
 
-          pub_key_bytes = base64.b64decode("$PUB_KEY")
+          pub_key_bytes = base64.b64decode(os.environ["PUB_KEY"])
           pub_key = nacl.public.PublicKey(pub_key_bytes)
           sealed = nacl.public.SealedBox(pub_key)
-          encrypted = sealed.encrypt(b"${{ steps.deploy.outputs.contract_id }}")
+          encrypted = sealed.encrypt(os.environ["CONTRACT_ID"].encode())
           print(base64.b64encode(encrypted).decode())
           EOF
           )
 
-          # Update the secret
+          # Update the distinctly-named repository secret per network
           curl -sS -X PUT \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/secrets/NEXT_PUBLIC_CONTRACT_ID" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/secrets/$SECRET_NAME" \
             -d "{\"encrypted_value\":\"$ENCRYPTED\",\"key_id\":\"$KEY_ID\"}"
 
-          echo "CONTRACT_ID secret updated successfully"
+          echo "$SECRET_NAME secret updated successfully"
+
+          # Also attempt updating the environment-scoped secret if environment is configured
+          ENV_PUB_KEY_RESP=$(curl -sS \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repositories/${{ github.repository_id }}/environments/$NETWORK/secrets/public-key" || true)
+
+          ENV_KEY_ID=$(echo "$ENV_PUB_KEY_RESP" | grep '"key_id"' | sed 's/.*: "\(.*\)".*/\1/')
+          ENV_PUB_KEY=$(echo "$ENV_PUB_KEY_RESP" | grep '"key"' | sed 's/.*: "\(.*\)".*/\1/')
+
+          if [ -n "$ENV_KEY_ID" ] && [ -n "$ENV_PUB_KEY" ]; then
+            ENV_ENCRYPTED=$(PUB_KEY="$ENV_PUB_KEY" CONTRACT_ID="$CONTRACT_ID" python3 - <<'EOF'
+            import base64, os, sys
+            import nacl.encoding, nacl.public
+
+            pub_key_bytes = base64.b64decode(os.environ["PUB_KEY"])
+            pub_key = nacl.public.PublicKey(pub_key_bytes)
+            sealed = nacl.public.SealedBox(pub_key)
+            encrypted = sealed.encrypt(os.environ["CONTRACT_ID"].encode())
+            print(base64.b64encode(encrypted).decode())
+            EOF
+            )
+
+            curl -sS -X PUT \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repositories/${{ github.repository_id }}/environments/$NETWORK/secrets/NEXT_PUBLIC_CONTRACT_ID" \
+              -d "{\"encrypted_value\":\"$ENV_ENCRYPTED\",\"key_id\":\"$ENV_KEY_ID\"}"
+
+            echo "Environment-scoped NEXT_PUBLIC_CONTRACT_ID for $NETWORK updated successfully"
+          fi
 
   notify-success:
     name: Notify deployment success
@@ -192,14 +230,17 @@ jobs:
     runs-on: ubuntu-latest
     if: success()
 
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
     steps:
       - name: Post success summary
         run: |
           echo "## Deployment Succeeded" >> "$GITHUB_STEP_SUMMARY"
-          echo "Contract deployed and verified on **${{ needs.deploy.outputs.network || 'testnet' }}**." >> "$GITHUB_STEP_SUMMARY"
+          echo "Contract deployed and verified on **${{ needs.deploy.outputs.network }}**." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Send Slack notification (success)
-        if: ${{ secrets.SLACK_WEBHOOK_URL != '' }}
+        if: env.SLACK_WEBHOOK_URL != ''
         uses: slackapi/slack-github-action@v1.27.0
         with:
           payload: |
@@ -227,6 +268,9 @@ jobs:
     runs-on: ubuntu-latest
     if: failure()
 
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
     steps:
       - name: Post failure summary
         run: |
@@ -234,7 +278,7 @@ jobs:
           echo "Contract deployment to testnet failed. Check the workflow logs for details." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Send Slack notification (failure)
-        if: ${{ secrets.SLACK_WEBHOOK_URL != '' }}
+        if: env.SLACK_WEBHOOK_URL != ''
         uses: slackapi/slack-github-action@v1.27.0
         with:
           payload: |

@@ -4,9 +4,10 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Check } from "lucide-react";
 import { apiFetch } from "@/lib/api-client";
+import { API_BASE_URL } from "@/lib/config";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 const DISMISSED_KEY_PREFIX = "onboardingChecklistDismissed:";
+export const SHARE_DONE_KEY_PREFIX = "onboardingShareDone:";
 
 type ChecklistItem = {
   key: string;
@@ -22,6 +23,7 @@ type Props = {
 
 export function OnboardingChecklist({ username, milestoneCount }: Props) {
   const [dismissed, setDismissed] = useState(true); // default hidden until we know state
+  const [shareDone, setShareDone] = useState(false);
   const [profile, setProfile] = useState<{
     emailVerified: boolean;
     avatarUrl: string | null;
@@ -36,6 +38,10 @@ export function OnboardingChecklist({ username, milestoneCount }: Props) {
     if (localStorage.getItem(dismissedKey) === "true") {
       return; // stay dismissed, don't bother fetching
     }
+
+    // Read the share-done flag for this user
+    const shareDoneKey = `${SHARE_DONE_KEY_PREFIX}${username}`;
+    setShareDone(localStorage.getItem(shareDoneKey) === "true");
 
     apiFetch(`${API_BASE_URL}/profiles/${username}`)
       .then(async (res) => {
@@ -90,7 +96,7 @@ export function OnboardingChecklist({ username, milestoneCount }: Props) {
     {
       key: "share",
       label: "Share your page",
-      done: false, // no on-chain/off-chain signal for this yet — always actionable
+      done: shareDone,
       href: `/profile/${username}`,
     },
   ];

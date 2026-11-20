@@ -5,6 +5,7 @@ import FocusTrap from "focus-trap-react";
 import { QRCodeSVG } from "qrcode.react";
 import { QrCode, X, Download, Copy, Check } from "lucide-react";
 import { SITE_URL } from "@/lib/config";
+import { SHARE_DONE_KEY_PREFIX } from "@/components/onboarding-checklist";
 
 type QRCodeButtonProps = {
   username: string;
@@ -13,9 +14,16 @@ type QRCodeButtonProps = {
 export function QRCodeButton({ username }: QRCodeButtonProps) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [downloadError, setDownloadError] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
   const qrRef = useRef<HTMLDivElement>(null);
   const profileUrl = `${typeof window !== "undefined" ? window.location.origin : SITE_URL}/profile/${username}`;
+
+  function markShared() {
+    if (typeof window !== "undefined") {
+      localStorage.setItem(`${SHARE_DONE_KEY_PREFIX}${username}`, "true");
+    }
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -39,6 +47,8 @@ export function QRCodeButton({ username }: QRCodeButtonProps) {
   }, [open]);
 
   const handleDownload = useCallback(() => {
+    setDownloadError(false);
+
     const svgEl = qrRef.current?.querySelector("svg");
     if (!svgEl) return;
 
@@ -46,6 +56,14 @@ export function QRCodeButton({ username }: QRCodeButtonProps) {
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+
+    let dataUri: string;
+    try {
+      dataUri = `data:image/svg+xml;base64,${btoa(svgData)}`;
+    } catch {
+      setDownloadError(true);
+      return;
+    }
 
     const img = new Image();
     img.onload = () => {
@@ -59,13 +77,18 @@ export function QRCodeButton({ username }: QRCodeButtonProps) {
       link.download = `novasupport-${username}-qr.png`;
       link.href = pngUrl;
       link.click();
+      markShared();
     };
-    img.src = `data:image/svg+xml;base64,${btoa(svgData)}`;
+    img.onerror = () => {
+      setDownloadError(true);
+    };
+    img.src = dataUri;
   }, [username]);
 
   const handleCopyUrl = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(profileUrl);
+      markShared();
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -76,6 +99,7 @@ export function QRCodeButton({ username }: QRCodeButtonProps) {
       textarea.select();
       document.execCommand("copy");
       document.body.removeChild(textarea);
+      markShared();
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
@@ -150,6 +174,11 @@ export function QRCodeButton({ username }: QRCodeButtonProps) {
                   {copied ? "Copied" : "Copy URL"}
                 </button>
               </div>
+              {downloadError && (
+                <p className="mt-2 text-center text-[10px] text-red-400">
+                  Download failed. Please try again.
+                </p>
+              )}
             </div>
           </FocusTrap>
         </>

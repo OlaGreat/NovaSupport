@@ -33,7 +33,7 @@ type Badge = {
   awardedAt: string;
 };
 
-// ── Date range presets ────────────────────────────────────────────────────────
+// ── Date range presets ───────────────────────────────────────────────────────��[...]
 type DatePreset = "all" | "7d" | "30d" | "custom";
 
 function getPresetRange(preset: DatePreset): { from: Date | null; to: Date | null } {
@@ -54,18 +54,42 @@ function getPresetRange(preset: DatePreset): { from: Date | null; to: Date | nul
 // ── Highlight matching text ───────────────────────────────────────────────────
 function Highlight({ text, query }: { text: string; query: string }) {
   if (!query.trim()) return <>{text}</>;
-  const idx = text.toLowerCase().indexOf(query.toLowerCase());
-  if (idx === -1) return <>{text}</>;
-  return (
-    <>
-      {text.slice(0, idx)}
-      <mark className="bg-mint/30 text-white rounded px-0.5">
+  const lowerText = text.toLowerCase();
+  const lowerQuery = query.toLowerCase();
+  const parts: (string | React.ReactNode)[] = [];
+  let lastIdx = 0;
+  let idx = 0;
+
+  while ((idx = lowerText.indexOf(lowerQuery, lastIdx)) !== -1) {
+    parts.push(text.slice(lastIdx, idx));
+    parts.push(
+      <mark key={idx} className="bg-mint/30 text-white rounded px-0.5">
         {text.slice(idx, idx + query.length)}
       </mark>
-      {text.slice(idx + query.length)}
-    </>
-  );
+    );
+    lastIdx = idx + query.length;
+  }
+
+  if (lastIdx < text.length) {
+    parts.push(text.slice(lastIdx));
+  }
+
+  return <>{parts}</>;
 }
+
+type ProfileTab = "history" | "badges";
+
+const TAB_ORDER: ProfileTab[] = ["history", "badges"];
+
+const TAB_IDS: Record<ProfileTab, string> = {
+  history: "profile-tab-history",
+  badges: "profile-tab-badges",
+};
+
+const PANEL_IDS: Record<ProfileTab, string> = {
+  history: "profile-tabpanel-history",
+  badges: "profile-tabpanel-badges",
+};
 
 export function ProfileTabs({ username }: { username: string }) {
   const router = useRouter();
@@ -106,6 +130,25 @@ export function ProfileTabs({ username }: { username: string }) {
     window.history.replaceState(null, "", newHash);
   }, []);
 
+  // WAI-ARIA tabs keyboard pattern (#1451): only the selected tab is in the
+  // tab order, and Arrow/Home/End keys move selection between tabs.
+  const handleTabListKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      const index = TAB_ORDER.indexOf(activeTab);
+      let nextIndex: number | null = null;
+      if (event.key === "ArrowRight") nextIndex = (index + 1) % TAB_ORDER.length;
+      else if (event.key === "ArrowLeft") nextIndex = (index - 1 + TAB_ORDER.length) % TAB_ORDER.length;
+      else if (event.key === "Home") nextIndex = 0;
+      else if (event.key === "End") nextIndex = TAB_ORDER.length - 1;
+      if (nextIndex === null) return;
+      event.preventDefault();
+      const nextTab = TAB_ORDER[nextIndex];
+      handleTabChange(nextTab);
+      document.getElementById(TAB_IDS[nextTab])?.focus();
+    },
+    [activeTab, handleTabChange],
+  );
+
   // ── Search state (#554) ────────────────────────────────────────────────────
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -138,28 +181,49 @@ export function ProfileTabs({ username }: { username: string }) {
     };
   }, []);
 
+  // Abort the in-flight request whenever the query changes so a slower earlier
+  // response can never overwrite the results of a newer one (#1064).
   useEffect(() => {
+    const controller = new AbortController();
+    const isStale = () => controller.signal.aborted;
+
     if (activeTab === "history") {
       setLoading(true);
       const params = new URLSearchParams();
       if (debouncedSearch.trim()) params.set("q", debouncedSearch.trim());
       const url = `${API_BASE_URL}/profiles/${username}/transactions${params.toString() ? "?" + params.toString() : ""}`;
-      fetch(url)
+      fetch(url, { signal: controller.signal })
         .then(res => res.json())
         .then(data => {
+          if (isStale()) return;
           setTransactions(data.transactions || []);
         })
-        .catch(err => console.error(err))
-        .finally(() => setLoading(false));
+        .catch(err => {
+          if (err instanceof DOMException && err.name === "AbortError") return;
+          console.error(err);
+        })
+        .finally(() => {
+          if (!isStale()) setLoading(false);
+        });
     }
     if (activeTab === "badges") {
       setBadgesLoading(true);
-      fetch(`${API_BASE_URL}/profiles/${username}/badges`)
+      fetch(`${API_BASE_URL}/profiles/${username}/badges`, { signal: controller.signal })
         .then(res => res.json())
-        .then(data => setBadges(data.badges || []))
-        .catch(err => console.error(err))
-        .finally(() => setBadgesLoading(false));
+        .then(data => {
+          if (isStale()) return;
+          setBadges(data.badges || []);
+        })
+        .catch(err => {
+          if (err instanceof DOMException && err.name === "AbortError") return;
+          console.error(err);
+        })
+        .finally(() => {
+          if (!isStale()) setBadgesLoading(false);
+        });
     }
+
+    return () => controller.abort();
   }, [username, activeTab, debouncedSearch]);
 
   // ── Filtered transactions (date only; search handled by API) ──────────────
@@ -168,8 +232,19 @@ export function ProfileTabs({ username }: { username: string }) {
 
     const { from, to } = preset === "custom"
       ? {
-          from: customFrom ? new Date(customFrom) : null,
-          to:   customTo   ? new Date(customTo)   : null,
+          // Build both boundaries from local date components. A bare
+          // "YYYY-MM-DD" string passed to `new Date()` is parsed as UTC
+          // midnight, which shifts the boundary for any viewer not at UTC
+          // (#1450). "From" is the start of the selected local day and "To"
+          // is the end of it, so the whole local calendar range is included.
+          from: customFrom ? (() => {
+            const [y, m, d] = customFrom.split("-").map(Number);
+            return new Date(y, (m || 1) - 1, d || 1, 0, 0, 0, 0);
+          })() : null,
+          to: customTo ? (() => {
+            const [y, m, d] = customTo.split("-").map(Number);
+            return new Date(y, (m || 1) - 1, d || 1, 23, 59, 59, 999);
+          })() : null,
         }
       : getPresetRange(preset);
 
@@ -193,14 +268,23 @@ export function ProfileTabs({ username }: { username: string }) {
     <div className="space-y-6">
       {/* ── Tab header ───────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-white/5 pb-1">
-        <div className="flex gap-8">
+        <div
+          role="tablist"
+          aria-label="Profile sections"
+          className="flex gap-8"
+          onKeyDown={handleTabListKeyDown}
+        >
           <TabButton
+            id={TAB_IDS.history}
+            panelId={PANEL_IDS.history}
             active={activeTab === "history"}
             onClick={() => handleTabChange("history")}
             icon={<History size={16} />}
             label="Support History"
           />
           <TabButton
+            id={TAB_IDS.badges}
+            panelId={PANEL_IDS.badges}
             active={activeTab === "badges"}
             onClick={() => handleTabChange("badges")}
             icon={<Award size={16} />}
@@ -221,6 +305,10 @@ export function ProfileTabs({ username }: { username: string }) {
         {activeTab === "history" ? (
           <motion.div
             key="history"
+            id={PANEL_IDS.history}
+            role="tabpanel"
+            aria-labelledby={TAB_IDS.history}
+            tabIndex={0}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
@@ -408,17 +496,13 @@ export function ProfileTabs({ username }: { username: string }) {
                       </>
                     )
                   ) : (
-                    <>
-                      <p className="text-gray-500 font-medium">No support yet</p>
-                      <p className="text-sm text-gray-400 mt-1">Be the first to support {username}!</p>
-                    </>
+                    <EmptyState
+                      variant="no-transactions"
+                      title="No transactions yet"
+                      description="Be the first to support this creator!"
+                    />
                   )}
                 </div>
-                <EmptyState
-                  variant="no-transactions"
-                  title="No transactions yet"
-                  description="Be the first to support this creator!"
-                />
               </>
             )}
           </motion.div>
@@ -426,6 +510,10 @@ export function ProfileTabs({ username }: { username: string }) {
           /* ── Badges tab (#460) ─────────────────────────────────────────── */
           <motion.div
             key="badges"
+            id={PANEL_IDS.badges}
+            role="tabpanel"
+            aria-labelledby={TAB_IDS.badges}
+            tabIndex={0}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
@@ -459,11 +547,6 @@ export function ProfileTabs({ username }: { username: string }) {
                 <p className="text-sm mt-1">Achievement badges will appear here once earned.</p>
               </div>
             )}
-            <EmptyState
-              variant="default"
-              title="Badges coming soon"
-              description="Achievement badges will appear here once earned. Start supporting creators to be eligible!"
-            />
           </motion.div>
         )}
       </AnimatePresence>
@@ -471,7 +554,9 @@ export function ProfileTabs({ username }: { username: string }) {
   );
 }
 
-function TabButton({ active, onClick, icon, label }: {
+function TabButton({ id, panelId, active, onClick, icon, label }: {
+  id: string;
+  panelId: string;
   active: boolean;
   onClick: () => void;
   icon: React.ReactNode;
@@ -479,6 +564,12 @@ function TabButton({ active, onClick, icon, label }: {
 }) {
   return (
     <button
+      type="button"
+      id={id}
+      role="tab"
+      aria-selected={active}
+      aria-controls={panelId}
+      tabIndex={active ? 0 : -1}
       onClick={onClick}
       className={`flex items-center gap-2 border-b-2 py-4 text-sm font-semibold transition-all ${
         active
