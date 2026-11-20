@@ -20,6 +20,7 @@ jobs:
   backend:
     name: Backend checks
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     defaults:
       run:

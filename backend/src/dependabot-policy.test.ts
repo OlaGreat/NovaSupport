@@ -36,3 +36,15 @@ test("dependabot ignores framework-critical major version bumps", () => {
   const majorIgnoreMatches = dependabotConfig.match(/version-update:semver-major/g) ?? [];
   assert.ok(majorIgnoreMatches.length >= 12);
 });
+
+test("dependabot holds back major bumps for Tailwind packages grouped together", () => {
+  // tailwindcss and @tailwindcss/* share the frontend-runtime-minor-patch group,
+  // so both must also share the semver-major ignore rule.
+  for (const dependency of ["tailwindcss", "@tailwindcss/*"]) {
+    const escaped = dependency.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+    assert.match(
+      dependabotConfig,
+      new RegExp(`dependency-name: "${escaped}"\\s*\\n\\s*update-types: \\["version-update:semver-major"\\]`),
+    );
+  }
+});
