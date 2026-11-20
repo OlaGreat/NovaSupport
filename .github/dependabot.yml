@@ -35,6 +35,8 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "tailwindcss"
         update-types: ["version-update:semver-major"]
+      - dependency-name: "@tailwindcss/*"
+        update-types: ["version-update:semver-major"]
       - dependency-name: "@stellar/stellar-sdk"
         update-types: ["version-update:semver-major"]
   - package-ecosystem: "npm"

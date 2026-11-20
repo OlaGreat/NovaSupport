@@ -20,6 +20,7 @@ jobs:
   e2e:
     name: Playwright E2E
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: frontend

@@ -22,6 +22,7 @@ jobs:
   frontend:
     name: Frontend checks
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: frontend
@@ -40,6 +41,7 @@ jobs:
   lighthouse:
     name: Lighthouse CI
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       pull-requests: write
     # Only run on PRs to avoid burning CI minutes on every push to main
