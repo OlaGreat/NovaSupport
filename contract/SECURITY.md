@@ -12,7 +12,7 @@ changes to the contract.
   No address can invoke `support()` on behalf of another address without that address
   signing the transaction.
 
-- **Positive-amount enforcement.** `amount <= 0` panics with `"amount must be positive"`.
+- **Positive-amount enforcement.** `support()` and `withdraw()` reject non-positive amounts by returning typed `Error` variants (`Error::ZeroAmount` for `amount == 0` and `Error::NegativeAmount` for `amount < 0`) rather than panicking with a string.
   Zero-value and negative-value calls are rejected at the contract level.
 
 - **Persistent support count.** `SupportCount` is stored in persistent storage and survives
@@ -27,9 +27,14 @@ changes to the contract.
 
 ## What the contract does NOT guarantee
 
-- **Fund custody and transfer via Soroban token client.** The contract transfers tokens to itself
+- **Fund custody and shared-pool model via Soroban token client.** The contract transfers tokens to itself
   on `support()` and from itself on `withdraw()` using the Soroban token client. These transfers
-  are atomic — both succeed or both fail. `SupportCount` and recipient totals are stored in
+  are atomic — both succeed or both fail. All recipients of a given asset share the contract's
+  pooled token balance for that asset (`DataKey::RecipientTotal(recipient, asset)` tracks each
+  recipient's owed share). To prevent fee-on-transfer or rebasing tokens from under-funding the
+  shared pool, `support()` verifies that the contract's token balance increased by at least `amount`
+  and rejects deposits that deliver less; non-standard (fee-on-transfer / rebasing) tokens are
+  unsupported and should not be accepted. `SupportCount` and recipient totals are stored in
   persistent storage separately from the actual token balances. The backend is responsible for
   reconciling on-chain balances with stored counts.
 
@@ -56,9 +61,12 @@ changes to the contract.
 - **Permissionless.** Anyone can call `support()` for any recipient address. There is no
   allowlist, role check, or admin gate on who may submit a support action.
 
-- **Admin key required for privileged operations.** The contract has an admin address that must
-  authorize pause/unpause operations via `require_auth()`. An upgrade path does not exist;
-  contract code is immutable once deployed.
+- **Admin key required for privileged operations (two-step rotation supported).** The contract has an
+  admin address that must authorize pause/unpause and `propose_admin()` operations via
+  `require_auth()`. Admin rotation is two-step: the current admin calls `propose_admin(new_admin)`
+  and the proposed address must call `accept_admin()` before taking effect. Use a multisig or
+  hardware-backed key for the admin slot, since losing an unrotated admin key while paused leaves
+  the contract paused. An upgrade path does not exist; contract code is immutable once deployed.
 
 - **Immutable once deployed.** The contract has no `upgrade` entry point. Once deployed to a contract ID, the WASM cannot be altered, and the admin key confers no upgrade authority. This ensures that the logic seen at the time of deployment is what will always execute for that ID. Any "upgrade" requires deploying a new contract instance and updating the platform to use the new ID.
 

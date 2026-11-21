@@ -24,6 +24,7 @@ pub enum Error {
     ContractPaused = 200,
     ContractNotInitialized = 201,
     AlreadyInitialized = 202,
+    NoPendingAdmin = 203,
 
     // Balance and transfer errors (300-399)
     InsufficientBalance = 300,
@@ -45,6 +46,7 @@ pub enum DataKey {
     RecipientCount(Address),
     RecipientTotal(Address, Address), // (Recipient, Asset)
     Admin,
+    PendingAdmin,
     Paused,
 }
 
@@ -179,6 +181,7 @@ pub fn unpause(e: Env) -> Result<(), Error> {
         if supporter_balance < o {
             return Err(Error::InsufficientBalance);
         }
+        let contract_balance_before = client.balance(&e.current_contract_address());
 
         // Effects: update all counters BEFORE the external token transfer (CEI)
         let st = e.storage().persistent();
@@ -216,6 +219,15 @@ pub fn unpause(e: Env) -> Result<(), Error> {
 
         // Interaction: transfer tokens LAST (checks-effects-interactions)
         client.transfer(&s, &e.current_contract_address(), &o);
+        let contract_balance_after = client.balance(&e.current_contract_address());
+        let received = contract_balance_after
+            .checked_sub(contract_balance_before)
+            .ok_or(Error::Overflow)?;
+        // Reject fee-on-transfer / rebasing tokens that deliver less than `o`,
+        // keeping the shared asset pool solvent across all recipients.
+        if received < o {
+            return Err(Error::InsufficientContractBalance);
+        }
 
         Ok(nct)
     }
@@ -288,9 +300,11 @@ pub fn unpause(e: Env) -> Result<(), Error> {
         st.set(&key, &new_balance);
         st.extend_ttl(&key, LEDGERS_THRESHOLD, LEDGERS_TO_LIVE);
 
-        // Emit a withdraw event
-        e.events()
-            .publish((symbol_short!("withdraw"), caller.clone(), asset.clone()), amount);
+        // Emit a withdraw event (including ledger timestamp for uniform indexing)
+        e.events().publish(
+            (symbol_short!("withdraw"), caller.clone(), asset.clone()),
+            (amount, e.ledger().timestamp()),
+        );
 
         // Interaction: transfer tokens LAST (checks-effects-interactions)
         client.transfer(&e.current_contract_address(), &recipient, &amount);
@@ -321,6 +335,57 @@ pub fn unpause(e: Env) -> Result<(), Error> {
 
     pub fn get_total_by_asset(e: Env, r: Address, asset: Address) -> i128 {
         Self::get_recipient_total(e, r, asset)
+    }
+
+    /// Initiate a two-step admin transfer. Only the current admin may propose.
+    pub fn propose_admin(e: Env, new_admin: Address) -> Result<(), Error> {
+        let admin: Address = e
+            .storage()
+            .persistent()
+            .get(&DataKey::Admin)
+            .ok_or(Error::ContractNotInitialized)?;
+        admin.require_auth();
+
+        e.storage()
+            .persistent()
+            .set(&DataKey::PendingAdmin, &new_admin);
+        e.storage()
+            .persistent()
+            .extend_ttl(&DataKey::PendingAdmin, LEDGERS_THRESHOLD, LEDGERS_TO_LIVE);
+
+        e.events().publish(
+            (symbol_short!("adm_prop"), admin),
+            (new_admin, e.ledger().timestamp()),
+        );
+
+        Ok(())
+    }
+
+    /// Complete a two-step admin transfer. Only the pending admin may accept.
+    pub fn accept_admin(e: Env) -> Result<(), Error> {
+        let pending: Address = e
+            .storage()
+            .persistent()
+            .get(&DataKey::PendingAdmin)
+            .ok_or(Error::NoPendingAdmin)?;
+        pending.require_auth();
+
+        e.storage().persistent().set(&DataKey::Admin, &pending);
+        e.storage()
+            .persistent()
+            .extend_ttl(&DataKey::Admin, LEDGERS_THRESHOLD, LEDGERS_TO_LIVE);
+        e.storage().persistent().remove(&DataKey::PendingAdmin);
+
+        e.events().publish(
+            (symbol_short!("adm_acc"), pending),
+            e.ledger().timestamp(),
+        );
+
+        Ok(())
+    }
+
+    pub fn pending_admin(e: Env) -> Option<Address> {
+        e.storage().persistent().get(&DataKey::PendingAdmin)
     }
 }
 
@@ -1162,6 +1227,7 @@ mod test {
         use soroban_sdk::testutils::Events as _;
         use soroban_sdk::TryFromVal as _;
 
+    fn two_step_admin_rotation_transfers_authority() {
         let e = Env::default();
         e.mock_all_auths();
         let contract_id = e.register(SupportPageContract, ());
@@ -1194,5 +1260,17 @@ mod test {
         let ev = SupportEvent::try_from_val(&e, &support_ev.2).unwrap();
         assert_eq!(ev.asset, asset);
         assert_eq!(ev.amount, 500_i128);
+        let next_admin = Address::generate(&e);
+        client.initialize(&admin);
+
+        client.propose_admin(&next_admin);
+        assert_eq!(client.pending_admin(), Some(next_admin.clone()));
+
+        client.accept_admin();
+        assert_eq!(client.pending_admin(), None);
+
+        // New admin can pause/unpause
+        client.pause();
+        client.unpause();
     }
 }
