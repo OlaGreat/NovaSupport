@@ -163,9 +163,9 @@ curl "https://friendbot.stellar.org?addr=SUPPORTER_ADDRESS"
 
 #### Error: "InvalidAssetCode"
 
-**Cause:** The asset code doesn't match the contract validation rules (1-12 alphanumeric characters).
+**Cause:** The asset code is empty or exceeds 12 characters (`asset_code.len() == 0 || asset_code.len() > 12`; the contract checks length only, not character classes).
 
-**Solution:** Use a valid asset code like "XLM", "USDC", or "AQUA".
+**Solution:** Use a valid asset code between 1 and 12 characters such as "XLM", "USDC", or "AQUA".
 
 #### Error: "Unauthorized" or "NotAdmin"
 
