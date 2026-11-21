@@ -197,7 +197,7 @@ Run the sanitization tests:
 
 ```bash
 cd backend
-npx tsx src/sanitize.test.ts
+npx tsx src/middleware/sanitize.test.ts
 ```
 
 The test suite covers:
