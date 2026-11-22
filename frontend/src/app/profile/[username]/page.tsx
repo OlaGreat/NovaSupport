@@ -14,6 +14,7 @@ import { ActivityFeed } from "@/components/activity-feed";
 import { EditProfileButton } from "@/components/edit-profile-button";
 import { ReportProfileModal } from "@/components/report-profile-modal";
 import { API_BASE_URL, SITE_URL } from "@/lib/config";
+import { formatAmount } from "@/lib/format";
 import { stellarExpertUrl } from "@/lib/stellar";
 
 type PageProps = {
@@ -354,7 +355,7 @@ export default async function ProfilePage({ params }: PageProps) {
                       {truncateAddress(entry.supporterAddress)}
                     </a>
                     <span className="text-xs font-semibold text-mint">
-                      {entry.totalAmount} {entry.assetCode}
+                      {formatAmount(entry.totalAmount)} {entry.assetCode}
                     </span>
                   </div>
                 ))}
@@ -380,7 +381,7 @@ export default async function ProfilePage({ params }: PageProps) {
               <div className="flex items-center justify-between">
                 <span className="text-sm text-sky/60">Total Raised</span>
                 <span className="text-sm font-bold text-white">
-                  {dominantAssetTotal?.total || "0"}{" "}
+                  {formatAmount(dominantAssetTotal?.total || "0")}{" "}
                   {dominantAssetTotal?.assetCode || "XLM"}
                 </span>
               </div>
