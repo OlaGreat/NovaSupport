@@ -44,6 +44,7 @@ Error codes are organized into ranges by category:
 | ---- | ------------------------------ | ------------------------------------------------- |
 | 300  | `InsufficientBalance`          | Supporter has insufficient token balance          |
 | 301  | `InsufficientContractBalance`  | Contract has insufficient balance for withdrawal  |
+| 302  | `Overflow`                     | Arithmetic overflow detected in checked operation |
 | 303  | `WithdrawAmountExceedsBalance` | Withdrawal amount exceeds recipient's balance     |
 
 ### Storage and Data Errors (400-499)
@@ -52,12 +53,6 @@ Error codes are organized into ranges by category:
 | ---- | ------------------- | -------------------------------------------------------- |
 | 402  | `RecipientNotFound` | Recipient has no balance for the specified asset         |
 | 403  | `ZeroBalance`       | Recipient has a zero balance for the requested operation |
-
-### Arithmetic Errors (500-599)
-
-| Code | Error Name | Description                                       |
-| ---- | ---------- | ------------------------------------------------- |
-| 500  | `Overflow` | Arithmetic overflow detected in checked operation |
 
 ## Usage Examples
 
@@ -81,14 +76,14 @@ match client.support(&supporter, &recipient, &asset, &amount, &code, &message) {
    - `ContractPaused` (200): Contract is paused by admin
    - `InsufficientBalance` (300): User doesn't have enough tokens
    - `MessageTooLong` (5): Support message exceeds 280 characters
-   - `Overflow` (500): Arithmetic overflow in balance calculation
+   - `Overflow` (302): Arithmetic overflow in balance calculation
 
 2. **Withdrawal Errors**:
    - `NotRecipient` (102): Someone other than recipient tries to withdraw
    - `WithdrawAmountExceedsBalance` (303): Trying to withdraw more than available
    - `RecipientNotFound` (402): No balance exists for this recipient/asset pair
    - `ZeroBalance` (403): Recipient balance is zero
-   - `Overflow` (500): Arithmetic overflow in balance calculation
+   - `Overflow` (302): Arithmetic overflow in balance calculation
 
 3. **Admin Operation Errors**:
    - `ContractNotInitialized` (201): Operations before initialization

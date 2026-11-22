@@ -258,7 +258,6 @@ function createRateLimiters() {
     limit: 200,
     standardHeaders: true,
     legacyHeaders: false,
-    skip: () => process.env.NODE_ENV === "test",
     message: {
       error: "Too many requests, please try again later.",
       code: "RATE_LIMIT_EXCEEDED",

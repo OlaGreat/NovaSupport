@@ -55,7 +55,6 @@ pub enum DataKey {
 pub struct SupportEvent {
     pub supporter: Address,
     pub recipient: Address,
-    pub asset: Address,
     pub amount: i128,
     pub asset_code: String,
     pub message: String,
@@ -209,7 +208,6 @@ pub fn unpause(e: Env) -> Result<(), Error> {
         let ev = SupportEvent {
             supporter: s.clone(),
             recipient: r.clone(),
-            asset: asset.clone(),
             amount: o,
             asset_code: c,
             message: m,
@@ -1223,10 +1221,6 @@ mod test {
     }
 
     #[test]
-    fn support_event_records_actual_asset_address() {
-        use soroban_sdk::testutils::Events as _;
-        use soroban_sdk::TryFromVal as _;
-
     fn two_step_admin_rotation_transfers_authority() {
         let e = Env::default();
         e.mock_all_auths();
@@ -1234,32 +1228,6 @@ mod test {
         let client = SupportPageContractClient::new(&e, &contract_id);
 
         let admin = Address::generate(&e);
-        let supporter = Address::generate(&e);
-        let recipient = Address::generate(&e);
-        let asset = e
-            .register_stellar_asset_contract_v2(admin.clone())
-            .address();
-        let token_admin = soroban_sdk::token::StellarAssetClient::new(&e, &asset);
-        token_admin.mint(&supporter, &1_000_i128);
-
-        client.initialize(&admin);
-        client.support(
-            &supporter,
-            &recipient,
-            &asset,
-            &500_i128,
-            &String::from_str(&e, "USDC"),
-            &String::from_str(&e, "Event check"),
-        );
-
-        let all = e.events().all();
-        let support_ev = all
-            .iter()
-            .find(|(addr, _, _)| *addr == contract_id)
-            .expect("support event not found");
-        let ev = SupportEvent::try_from_val(&e, &support_ev.2).unwrap();
-        assert_eq!(ev.asset, asset);
-        assert_eq!(ev.amount, 500_i128);
         let next_admin = Address::generate(&e);
         client.initialize(&admin);
 

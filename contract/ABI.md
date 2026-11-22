@@ -123,7 +123,7 @@ Errors:
 - `MessageTooLong` (5) - `message` exceeds 280 characters.
 - `InvalidAssetCode` (6) - `asset_code` is empty or exceeds 12 characters.
 - `InsufficientBalance` (300) - Supporter does not have enough tokens.
-- `Overflow` (500) - Arithmetic overflow in balance calculation.
+- `Overflow` (302) - Arithmetic overflow in balance calculation.
 - `ContractNotInitialized` (201) - Contract has not been initialized.
 - `ContractPaused` (200) - Contract is paused.
 - Soroban auth failure - If `supporter` does not authorize the call.
@@ -168,7 +168,7 @@ Errors:
 - `ZeroBalance` (403) - Recipient's recorded balance is zero.
 - `WithdrawAmountExceedsBalance` (303) - Requested amount exceeds recipient's recorded balance.
 - `InsufficientContractBalance` (301) - Contract does not hold enough tokens.
-- `Overflow` (500) - Arithmetic overflow in balance calculation.
+- `Overflow` (302) - Arithmetic overflow in balance calculation.
 - Soroban auth failure - If `caller` does not authorize the call.
 
 ### `support_count(env) -> u32`
@@ -307,7 +307,7 @@ The contract defines a `#[contracterror]` enum with the following numeric varian
 | `AlreadyInitialized`           | 202   | `initialize()` called more than once.                            |
 | `InsufficientBalance`          | 300   | Supporter does not have enough tokens.                           |
 | `InsufficientContractBalance`  | 301   | Contract does not hold enough tokens for withdrawal.             |
+| `Overflow`                     | 302   | Arithmetic overflow in balance calculation (checked arithmetic). |
 | `WithdrawAmountExceedsBalance` | 303   | Requested withdrawal exceeds recipient's recorded balance.       |
 | `RecipientNotFound`            | 402   | Recipient has never received support.                            |
 | `ZeroBalance`                  | 403   | Recipient's recorded balance is zero.                            |
-| `Overflow`                     | 500   | Arithmetic overflow in balance calculation (checked arithmetic). |
