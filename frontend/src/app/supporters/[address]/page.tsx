@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { EmptyState } from "@/components/empty-state";
 import { API_BASE_URL } from "@/lib/config";
+import { formatAmount } from "@/lib/format";
 import { stellarExpertUrl } from "@/lib/stellar";
 import { StrKey } from "@stellar/stellar-sdk";
 import {
@@ -127,11 +128,6 @@ function normalizeAssetTotals(
     assetCode,
     total: String(total),
   }));
-}
-
-function formatAmount(amount: string): string {
-  const value = Number(amount);
-  return Number.isFinite(value) ? value.toLocaleString(undefined, { maximumFractionDigits: 7 }) : amount;
 }
 
 export default async function SupporterPage({ params }: PageProps) {

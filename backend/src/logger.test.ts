@@ -5,7 +5,7 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AddressInfo } from "node:net";
 import pino from "pino";
-import { logger } from "./logger.js";
+import { logger, resolveTransport } from "./logger.js";
 import { createApp } from "./app.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -64,11 +64,8 @@ async function main() {
     const originalEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = "production";
     try {
-      // Re-create a logger with production env to test the transport logic
-      const transport =
-        process.env.NODE_ENV !== "production"
-          ? { target: "pino-pretty", options: { colorize: true } }
-          : undefined;
+      // Call the real transport-selection function (not an inline copy)
+      const transport = resolveTransport();
 
       const { stream, getOutput } = makeLogStream();
       const prodLogger = pino({ level: "info", transport }, stream as NodeJS.WritableStream);
@@ -94,10 +91,8 @@ async function main() {
     const originalEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = "development";
     try {
-      const transport =
-        process.env.NODE_ENV !== "production"
-          ? { target: "pino-pretty", options: { colorize: true } }
-          : undefined;
+      // Call the real transport-selection function (not an inline copy)
+      const transport = resolveTransport();
 
       assert.ok(transport !== undefined, "transport should be defined in development");
       assert.equal(
