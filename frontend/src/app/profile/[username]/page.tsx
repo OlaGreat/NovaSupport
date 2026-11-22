@@ -15,7 +15,7 @@ import { EditProfileButton } from "@/components/edit-profile-button";
 import { ReportProfileModal } from "@/components/report-profile-modal";
 import { API_BASE_URL, SITE_URL } from "@/lib/config";
 import { formatAmount } from "@/lib/format";
-import { stellarExpertUrl } from "@/lib/stellar";
+import { isMuxedAddress, stellarExpertAccountUrl } from "@/lib/stellar";
 
 type PageProps = {
   params: {
@@ -97,17 +97,17 @@ export async function generateMetadata({
 
   return {
     title: `${profile.displayName} on NovaSupport`,
-    description: profile.bio ?? `Support ${profile.displayName} on NovaSupport`,
+    description: profile.bio || `Support ${profile.displayName} on NovaSupport`,
     openGraph: {
       title: `${profile.displayName} on NovaSupport`,
-      description: profile.bio ?? `Support ${profile.displayName} on NovaSupport`,
+      description: profile.bio || `Support ${profile.displayName} on NovaSupport`,
       url: `${SITE_URL}/profile/${params.username}`,
       type: "profile",
     },
     twitter: {
       card: "summary_large_image",
       title: `${profile.displayName} on NovaSupport`,
-      description: profile.bio ?? `Support ${profile.displayName} on NovaSupport`,
+      description: profile.bio || `Support ${profile.displayName} on NovaSupport`,
     },
     alternates: {
       types: {
@@ -340,25 +340,44 @@ export default async function ProfilePage({ params }: PageProps) {
                 Top Supporters
               </h4>
               <div className="space-y-3">
-                {leaderboard.map((entry) => (
-                  <div
-                    key={`${entry.rank}-${entry.supporterAddress}`}
-                    className="flex items-center justify-between gap-4"
-                  >
-                    <span className="text-xs text-sky/70">#{entry.rank}</span>
-                    <a
-                      href={stellarExpertUrl("account", entry.supporterAddress)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-mono text-xs text-white hover:text-mint transition-colors"
+                {leaderboard.map((entry) => {
+                  const explorerUrl = stellarExpertAccountUrl(
+                    entry.supporterAddress,
+                  );
+                  return (
+                    <div
+                      key={`${entry.rank}-${entry.supporterAddress}`}
+                      className="flex items-center justify-between gap-4"
                     >
-                      {truncateAddress(entry.supporterAddress)}
-                    </a>
-                    <span className="text-xs font-semibold text-mint">
-                      {formatAmount(entry.totalAmount)} {entry.assetCode}
-                    </span>
-                  </div>
-                ))}
+                      <span className="text-xs text-sky/70">#{entry.rank}</span>
+                      {explorerUrl ? (
+                        <a
+                          href={explorerUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={
+                            isMuxedAddress(entry.supporterAddress)
+                              ? "Muxed address — links to the underlying account"
+                              : undefined
+                          }
+                          className="font-mono text-xs text-white hover:text-mint transition-colors"
+                        >
+                          {truncateAddress(entry.supporterAddress)}
+                        </a>
+                      ) : (
+                        <span
+                          className="font-mono text-xs text-white"
+                          title="Unrecognized Stellar address"
+                        >
+                          {truncateAddress(entry.supporterAddress)}
+                        </span>
+                      )}
+                      <span className="text-xs font-semibold text-mint">
+                        {formatAmount(entry.totalAmount)} {entry.assetCode}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ) : (

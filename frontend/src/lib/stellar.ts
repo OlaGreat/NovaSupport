@@ -278,6 +278,41 @@ export function stellarExpertUrl(
   return `https://stellar.expert/explorer/${net}/${type}/${id}`;
 }
 
+/**
+ * Returns true when `address` is a muxed (M…) Stellar account address.
+ * Muxed addresses are valid supporter addresses but the Stellar Expert
+ * account route cannot resolve them directly.
+ */
+export function isMuxedAddress(address: string): boolean {
+  try {
+    return StrKey.isValidMed25519PublicKey(address);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Builds a Stellar Expert account URL that is safe for both G… and M…
+ * addresses. For muxed addresses we resolve to the underlying G… account
+ * (the first 32 bytes of the decoded M address) instead of emitting a URL
+ * the explorer cannot resolve. Returns null for unrecognised addresses.
+ */
+export function stellarExpertAccountUrl(address: string): string | null {
+  const net = stellarConfig.stellarNetwork === "PUBLIC" ? "public" : "testnet";
+
+  if (StrKey.isValidEd25519PublicKey(address)) {
+    return `https://stellar.expert/explorer/${net}/account/${address}`;
+  }
+
+  if (isMuxedAddress(address)) {
+    const raw = StrKey.decodeMed25519PublicKey(address);
+    const baseAddress = StrKey.encodeEd25519PublicKey(raw.subarray(0, 32));
+    return `https://stellar.expert/explorer/${net}/account/${baseAddress}`;
+  }
+
+  return null;
+}
+
 export function getDefaultNetworkPassphrase(): string {
   return NETWORK_PASSPHRASE;
 }

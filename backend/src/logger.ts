@@ -1,6 +1,6 @@
 import pino, { Logger } from "pino";
 
-function resolveTransport(): pino.TransportSingleOptions | undefined {
+export function resolveTransport(): pino.TransportSingleOptions | undefined {
   if (process.env.NODE_ENV !== "production") {
     return { target: "pino-pretty", options: { colorize: true } };
   }
