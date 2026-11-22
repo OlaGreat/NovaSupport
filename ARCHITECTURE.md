@@ -28,16 +28,21 @@ Why this choice:
 
 ## Backend Responsibilities
 
-The backend is a lightweight Node.js + Express service responsible for:
+The backend is a Node.js + Express service responsible for:
 
 - storing users and profile metadata
 - storing accepted assets per profile
 - storing support transaction records and offchain status tracking
-- acting as a future bridge for indexing Horizon or contract events
+- **on-chain event indexer** — polls Soroban RPC for `SupportEvent`s and persists them as `SupportTransaction` rows, keeping the backend in sync with the contract without trusting the client
+- **webhook delivery queue** — fans out configurable HTTP webhooks to creator endpoints on each support event, with retry logic and circuit-breaker states
+- **recurring-support scheduler** — processes active `RecurringSupport` records at their configured frequency and records executions
+- **weekly digest job** — emails creators a summary of their support activity over the past week
+- **automated badge-award system** — evaluates milestone conditions after each support event and awards badges when thresholds are crossed
+- **Stellar federation support** — resolves `*stellar.link` federation addresses to wallet public keys so creators can use human-readable addresses
 
 Why this choice:
 
-- Express keeps the service small and understandable
+- Express keeps the service understandable and easy to extend
 - Prisma gives contributors a clear schema-first workflow
 - TypeScript improves readability for new contributors joining mid-build
 
