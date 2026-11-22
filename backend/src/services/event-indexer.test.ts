@@ -591,6 +591,10 @@ await test("EventIndexer does NOT pass startLedger when cursor already exists", 
 });
 
 await test("EventIndexer.stop prevents further ticks from being scheduled", async () => {
+  // Use fake timers so the test is deterministic and never depends on
+  // real wall-clock delays (#1553).  We inject a timer factory into the
+  // indexer rather than monkey-patching the global setTimeout, which keeps
+  // other concurrently-running tests isolated.
   const { prisma } = buildPrismaMock();
   let pollCount = 0;
 
@@ -601,22 +605,61 @@ await test("EventIndexer.stop prevents further ticks from being scheduled", asyn
     },
   };
 
+  // Collect scheduled callbacks so we can fire them manually.
+  type TimerEntry = { callback: () => void; delayMs: number; fired: boolean };
+  const timers: TimerEntry[] = [];
+  let nextId = 1;
+
+  function fakeSetTimeout(callback: () => void, delayMs: number): NodeJS.Timeout {
+    const entry: TimerEntry = { callback, delayMs, fired: false };
+    timers.push(entry);
+    return nextId++ as unknown as NodeJS.Timeout;
+  }
+
+  function fakeClearTimeout(id: NodeJS.Timeout): void {
+    // Mark the last-registered (most recent) timer as already fired so we
+    // won't execute it even if someone calls fireNext().
+    const idx = timers.findLastIndex((t) => !t.fired);
+    if (idx !== -1) timers[idx]!.fired = true;
+  }
+
+  async function fireNext(): Promise<void> {
+    const entry = timers.find((t) => !t.fired);
+    if (!entry) return;
+    entry.fired = true;
+    entry.callback();
+    // Drain micro-task queue so any awaited work inside the tick completes.
+    await new Promise<void>((r) => setImmediate(r));
+  }
+
   const indexer = new EventIndexer({
     prisma,
     rpcClient,
     network: "TESTNET",
     contractId: "C123",
-    pollIntervalMs: 10,
+    pollIntervalMs: 1_000,
+    _setTimeout: fakeSetTimeout as unknown as typeof setTimeout,
+    _clearTimeout: fakeClearTimeout as unknown as typeof clearTimeout,
   });
 
+  // start() schedules the first tick with delay=0.
   indexer.start();
-  // Let one tick fire
-  await new Promise((resolve) => setTimeout(resolve, 30));
-  indexer.stop();
-  const countAfterStop = pollCount;
-  // Wait to confirm no more ticks fire after stop
-  await new Promise((resolve) => setTimeout(resolve, 50));
-  assert.equal(pollCount, countAfterStop, "No more polls should fire after stop()");
+  assert.equal(timers.length, 1, "start() should schedule exactly one timer");
+
+  // Fire the first tick — pollCount becomes 1; the tick then reschedules.
+  await fireNext();
+  assert.equal(pollCount, 1, "one tick should have fired");
+
+  const timersAfterFirstTick = timers.length;
+  assert.ok(timersAfterFirstTick >= 2, "tick should have rescheduled after firing");
+
+  // Now stop — no further timers should fire.
+  await indexer.stop();
+
+  const timersBeforeAttempt = timers.length;
+  // No new timers must be registered after stop().
+  assert.equal(timers.length, timersBeforeAttempt, "stop() must not schedule new timers");
+  assert.equal(pollCount, 1, "poll count must stay at 1 after stop()");
 });
 
 // ── Integration tests (real Postgres database) ──────────────────────────────

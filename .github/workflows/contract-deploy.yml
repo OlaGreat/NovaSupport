@@ -167,13 +167,14 @@ jobs:
           KEY_ID=$(echo "$PUB_KEY_RESP" | grep '"key_id"' | sed 's/.*: "\(.*\)".*/\1/')
           PUB_KEY=$(echo "$PUB_KEY_RESP" | grep '"key"' | sed 's/.*: "\(.*\)".*/\1/')
 
-          # Use Python (available on ubuntu-latest) to encrypt with libsodium using pinned PyNaCl
-          ENCRYPTED=$(PUB_KEY="$PUB_KEY" CONTRACT_ID="$CONTRACT_ID" python3 - <<'EOF'
-          import base64, os, sys
+          # Install PyNaCl inside a virtual environment to avoid
+          # externally-managed-environment restrictions on current runner
+          # images (#1548).
+          python3 -m venv /tmp/nacl-venv
+          /tmp/nacl-venv/bin/pip install PyNaCl==1.5.0 -q
 
-          # Use PyNaCl for sealed box encryption (matches GitHub's requirement, pinned version)
-          import subprocess
-          subprocess.check_call(["pip", "install", "PyNaCl==1.5.0", "-q"])
+          ENCRYPTED=$(PUB_KEY="$PUB_KEY" CONTRACT_ID="$CONTRACT_ID" /tmp/nacl-venv/bin/python3 - <<'EOF'
+          import base64, os
           import nacl.encoding, nacl.public
 
           pub_key_bytes = base64.b64decode(os.environ["PUB_KEY"])
@@ -203,8 +204,8 @@ jobs:
           ENV_PUB_KEY=$(echo "$ENV_PUB_KEY_RESP" | grep '"key"' | sed 's/.*: "\(.*\)".*/\1/')
 
           if [ -n "$ENV_KEY_ID" ] && [ -n "$ENV_PUB_KEY" ]; then
-            ENV_ENCRYPTED=$(PUB_KEY="$ENV_PUB_KEY" CONTRACT_ID="$CONTRACT_ID" python3 - <<'EOF'
-            import base64, os, sys
+            ENV_ENCRYPTED=$(PUB_KEY="$ENV_PUB_KEY" CONTRACT_ID="$CONTRACT_ID" /tmp/nacl-venv/bin/python3 - <<'EOF'
+            import base64, os
             import nacl.encoding, nacl.public
 
             pub_key_bytes = base64.b64decode(os.environ["PUB_KEY"])

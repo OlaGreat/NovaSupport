@@ -74,6 +74,16 @@ export interface EventIndexerOptions {
    * from blocking on a massive backlog. Defaults to 500.
    */
   maxPagesPerTick?: number;
+  /**
+   * Injectable timer factory. Defaults to the global `setTimeout`.
+   * Pass a fake implementation in tests to avoid real wall-clock delays (#1553).
+   */
+  _setTimeout?: typeof setTimeout;
+  /**
+   * Injectable timer canceller. Defaults to the global `clearTimeout`.
+   * Pass a fake implementation in tests to avoid real wall-clock delays (#1553).
+   */
+  _clearTimeout?: typeof clearTimeout;
 }
 
 const DEFAULT_POLL_INTERVAL_MS = 10_000;
@@ -92,6 +102,8 @@ export class EventIndexer {
   private readonly pollIntervalMs: number;
   private readonly startLedger: number | undefined;
   private readonly maxPagesPerTick: number;
+  private readonly _setTimeout: typeof setTimeout;
+  private readonly _clearTimeout: typeof clearTimeout;
   private stopped = false;
   private timer: NodeJS.Timeout | null = null;
   private currentTick: Promise<void> | null = null;
@@ -108,6 +120,8 @@ export class EventIndexer {
     this.pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
     this.startLedger = options.startLedger;
     this.maxPagesPerTick = options.maxPagesPerTick ?? DEFAULT_MAX_PAGES_PER_TICK;
+    this._setTimeout = options._setTimeout ?? setTimeout;
+    this._clearTimeout = options._clearTimeout ?? clearTimeout;
   }
 
   start(): void {
@@ -118,7 +132,7 @@ export class EventIndexer {
   async stop(): Promise<void> {
     this.stopped = true;
     if (this.timer) {
-      clearTimeout(this.timer);
+      this._clearTimeout(this.timer);
       this.timer = null;
     }
     if (this.currentTick) {
@@ -333,7 +347,7 @@ export class EventIndexer {
 
   private scheduleNextTick(delayMs: number): void {
     if (this.stopped) return;
-    this.timer = setTimeout(() => {
+    this.timer = this._setTimeout(() => {
       this.timer = null;
       this.currentTick = this.tick()
         .catch((err) => {
