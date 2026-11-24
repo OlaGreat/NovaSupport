@@ -17,6 +17,7 @@ export function QRCodeButton({ username }: QRCodeButtonProps) {
   const [downloadError, setDownloadError] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
   const qrRef = useRef<HTMLDivElement>(null);
+  const toggleRef = useRef<HTMLButtonElement>(null);
   const profileUrl = `${typeof window !== "undefined" ? window.location.origin : SITE_URL}/profile/${username}`;
 
   function markShared() {
@@ -33,7 +34,11 @@ export function QRCodeButton({ username }: QRCodeButtonProps) {
     }
 
     function handleClickOutside(e: MouseEvent) {
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      // The toggle button handles its own click; ignore it here so the
+      // popover is not closed and then immediately re-opened.
+      if (toggleRef.current?.contains(target)) return;
+      if (popoverRef.current && !popoverRef.current.contains(target)) {
         setOpen(false);
       }
     }
@@ -108,6 +113,7 @@ export function QRCodeButton({ username }: QRCodeButtonProps) {
   return (
     <div className="relative">
       <button
+        ref={toggleRef}
         type="button"
         onClick={() => setOpen((prev) => !prev)}
         aria-label="Show QR code"
