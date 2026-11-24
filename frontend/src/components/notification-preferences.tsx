@@ -28,6 +28,7 @@ export function NotificationPreferences({ username }: Props) {
   const [emailVerified, setEmailVerified] = useState<boolean | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     setLoading(true);
     setError(null);
     Promise.all([
@@ -41,13 +42,20 @@ export function NotificationPreferences({ username }: Props) {
         ]),
       )
       .then(([prefsData, profileData]) => {
+        if (cancelled) return;
         if (prefsData) setPrefs(prefsData);
         if (profileData) setEmailVerified(profileData.emailVerified ?? false);
       })
       .catch(() => {
+        if (cancelled) return;
         setError("Failed to load notification preferences");
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [username]);
 
   const handleToggle = useCallback(

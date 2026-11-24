@@ -78,6 +78,12 @@ function ConfettiBurst() {
   );
 }
 
+function formatAmount(value: number): string {
+  return Number.isFinite(value)
+    ? value.toLocaleString(undefined, { maximumFractionDigits: 7 })
+    : "—";
+}
+
 export function MilestoneCard({ milestone, index = 0 }: MilestoneCardProps) {
   const current = parseFloat(milestone.currentAmount);
   const target = parseFloat(milestone.targetAmount);
@@ -139,7 +145,15 @@ export function MilestoneCard({ milestone, index = 0 }: MilestoneCardProps) {
       </div>
 
       <div className="space-y-2">
-        <div className="relative w-full h-2 rounded-full bg-white/5 overflow-hidden">
+        <div
+          role="progressbar"
+          aria-label={`Funding progress for ${milestone.title}`}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(progress)}
+          aria-valuetext={`${Math.round(progress)}% funded`}
+          className="relative w-full h-2 rounded-full bg-white/5 overflow-hidden"
+        >
           <motion.div
             initial={{ width: 0 }}
             animate={{ width: `${progress}%` }}
@@ -170,7 +184,7 @@ export function MilestoneCard({ milestone, index = 0 }: MilestoneCardProps) {
             "font-medium tabular-nums",
             isReached ? "text-mint" : "text-steel"
           )}>
-            {current.toLocaleString(undefined, { maximumFractionDigits: 7 })} / {target.toLocaleString(undefined, { maximumFractionDigits: 7 })}{" "}
+            {formatAmount(current)} / {formatAmount(target)}{" "}
             <span className={cn(
               "font-semibold",
               isReached ? "text-mint" : "text-sky/60"
