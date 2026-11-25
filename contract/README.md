@@ -266,7 +266,7 @@ stellar contract invoke \
   --id <CONTRACT_ID> \
   --network testnet \
   -- recipient_count \
-  --recipient <RECIPIENT_ADDRESS>
+  --r <RECIPIENT_ADDRESS>
 ```
 
 ### Call the contract after deploy
