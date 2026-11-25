@@ -49,27 +49,27 @@ The sanitization middleware automatically processes all incoming requests to:
 
 ### HTML Content Fields (XSS Protection)
 ```typescript
-bio, message, description, displayName, title, name, text, content, notes, username
+bio, message, memo, details, description, displayName, title, name, username
 ```
 
 ### URL Fields (Validation & Normalization)
 ```typescript
-websiteUrl, avatarUrl, webhookUrl, url, link
+websiteUrl, avatarUrl, webhookUrl, url
 ```
 
 ### Social Handle Fields (Platform-Specific Validation)
 ```typescript
-twitterHandle, githubHandle, linkedinHandle, discordHandle
+twitterHandle, githubHandle
 ```
 
 ### Email Fields (Format & Security Validation)
 ```typescript
-email, contactEmail, notificationEmail
+email
 ```
 
 ### Lowercase Fields (Case Normalization)
 ```typescript
-username, email, contactEmail, notificationEmail
+username, email
 ```
 
 ## Length Limits
@@ -197,7 +197,7 @@ Run the sanitization tests:
 
 ```bash
 cd backend
-npx tsx src/sanitize.test.ts
+npx tsx src/middleware/sanitize.test.ts
 ```
 
 The test suite covers:
